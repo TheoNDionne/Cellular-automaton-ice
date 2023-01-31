@@ -1,5 +1,9 @@
 """
-FUNCTIONS I GUESS, FILL THIS OUT LATER
+Functions used to simulate the formation of a C6v symmetric snowflakes.
+
+*** Re-implementation of bits of code found in numpy are due to ***
+*** restricted numpy support in numba.                          ***
+
 """
 
 import numpy as np
@@ -13,6 +17,21 @@ import numba as nb
 
 @nb.njit
 def initialize_sat_map(l, w, initial_sat):
+    """ Function that initializes the saturation map at a 
+    constant value `initial_sat`.
+
+    Arguments
+    ---------
+    l : int
+        Total length of the restricted simulation zone (1/12th) 
+        of total snowflake.
+    w : int
+        Total width of the restricted simulation zone.
+
+    Return
+    ------
+    The initialized saturation map. (array(float, 2d))
+    """ 
     sat_map = np.zeros((l,w), dtype=np.float64)
 
     for line in range(l):
@@ -23,6 +42,21 @@ def initialize_sat_map(l, w, initial_sat):
 
 #### MAYBE USE JIT HERE FOR CONSISTENCY??
 def construct_minimal_ice_map(l, w):
+    """ Function that constructs the minimal ice map defined 
+    in the model (4 cells).
+
+    Arguments
+    ---------
+    l : int
+        Total length of the restricted simulation zone (1/12th) 
+        of total snowflake.
+    w : int
+        Total width of the restricted simulation zone.
+    
+    Return
+    ------
+    The minimal possible ice map. (array(bool, 2d))
+    """
     ice_map = np.full((l, w), False, dtype=bool)
 
     # minimum amount of initial ice that doesn't brick the model
@@ -46,11 +80,45 @@ def construct_minimal_ice_map(l, w):
 
 @nb.njit
 def is_legit_cell(line, col, L):
+    """ Function that verified that provided coordinates are 
+    part of the model.
+    
+    Arguments
+    ---------
+    line : int
+        The line of the cell to check in the model.
+    col : int
+        The column of the cell to check in the model.
+
+    Return
+    ------
+    Returns if the cell is a legit simulation cell. (bool)
+    """
     return line<L and col<(L - line + 1)//2 and line>=0 and col>=0
 
 
 @nb.njit
-def get_neighbors(line, col, L):
+def get_neighbors(line, col, l):
+    """ Function that gets nearest neighbors of a hexagonal cell
+    in the simulation model.
+
+    Arguments
+    ---------
+    line : int
+        The line of the cell to check in the model.
+    col : int
+        The column of the cell to check in the model.
+    L : int
+        Total length of the model. 
+
+    Return
+    ------
+    The neighbors of cell at position (line, col) in the model (array(float, 2d)).
+    If there is no neighbor, coords are replaced by `np.nan`. Array of the form 
+    Arr[k,l], where:
+    - k : 'neighbor index' (6 possibilities for hexagonal cells).
+    - l : toggle between line and column of neighbor at index `k`.
+    """
     relative_nearest_neighbors = np.array([
         [-1,0],
         [-1,1],
@@ -66,7 +134,7 @@ def get_neighbors(line, col, L):
         neighbor_line = line + relative_nearest_neighbors[i,0]
         neighbor_col = col + relative_nearest_neighbors[i,1]
 
-        if is_legit_cell(neighbor_line, neighbor_col, L):
+        if is_legit_cell(neighbor_line, neighbor_col, l):
             absolute_nearest_neighbors[i, :] = [neighbor_line, neighbor_col]
         else:
             absolute_nearest_neighbors[i, :] = [np.nan, np.nan]
@@ -76,6 +144,25 @@ def get_neighbors(line, col, L):
 
 @nb.njit
 def construct_neighbor_array(l, w):
+    """ Constructs the array of nearest neighbors for all cells in the model.
+
+    Arguments
+    ---------
+    l : int
+        Total length of the restricted simulation zone (1/12th) 
+        of total snowflake.
+    w : int
+        Total width of the restricted simulation zone. 
+
+    Return
+    ------
+    Returns a 4d array of neighbor cells for all cells (array(float, 4d)).
+    Array is indexed with the following indexes Arr[i,j,k,l], where:
+    - i : line of the cell for which to get neighbors.
+    - j : column of the cell for which to get neighbors.
+    - k : 'neighbor index' (6 possibilities for hexagonal cells).
+    - l : toggle between line and column of neighbor at index `k`.
+    """
     neighbor_array = np.empty((l, w, 6, 2))
 
     for line in range(l):
@@ -92,6 +179,22 @@ def construct_neighbor_array(l, w):
 
 @nb.njit
 def construct_boundary_map(ice_map, neighbor_array):
+    """ Function that constructs a map of all boudary pixels. The number 
+    ascribed to each cell is the number of nearest neighbors (AKA: the kink neighbor).
+
+    Arguments
+    ---------
+    ice_map : array(bool, 2d)
+        The boolean map that represents the physical location of ice cells.
+    neighbor_array : array(float, 4d)
+        The array representing neigbors in the model of the form produced by 
+        construct_neighbor_array().
+    
+    Return
+    ------
+    The two dimensional map of the amount of neighboring ice cells (excluding 
+    ice cells themselves). (array(int, 2d))
+    """
     l = np.shape(ice_map)[0]
     boundary_map = np.full_like(ice_map, 0, dtype=np.int8)
 
@@ -122,6 +225,26 @@ def construct_boundary_map(ice_map, neighbor_array):
 
 @nb.njit
 def construct_default_diffusion_rules(l, w):
+    """ Constructs the 'vanilla' diffusion rules using the discretized
+    version of the diffusion equation.
+
+    Arguments
+    ---------
+    l : int
+        Total length of the restricted simulation zone (1/12th) 
+        of total snowflake.
+    w : int
+        Total width of the restricted simulation zone. 
+
+    Retour
+    ------
+    Returns the set of diffusion rules for the model (array(float, 3d)).
+    Array is indexed as Arr[i,j,k], where:
+    - i : line of the cell to diffuse.
+    - j : column of the cell to diffuse.
+    - k : coefficient by which to multiply saturation situated at 
+          neighbor index `k`.
+    """
     # diffusion for average-cell
     inner_rule_set = np.ones(6)/6
     
@@ -181,6 +304,21 @@ def construct_default_diffusion_rules(l, w):
 
 @nb.njit
 def diffuse_cell(old_sat_map, local_diffusion_rules, neighbors):
+    """ Returns the value of a cell after one step of the diffusion process.
+
+    Arguments
+    ---------
+    old_sat_map : array(float, 2d)
+        The saturation field before the diffusion step.
+    local_diffusion_rules : array(float, 1d)
+        The local diffusion rules as a slice of diffusion_rules[i,j,:].
+    neighbors : array(float, 2d)
+        The local neighbors as a slice of neighbor_array[i,j,:,:].
+
+    Return
+    ------
+    The new sat map after a diffusion iteration. (array(float, 2d))
+    """
     new_sat = 0 # initialize new saturation 
     
     for i in range(np.shape(neighbors)[0]):
@@ -194,6 +332,9 @@ def diffuse_cell(old_sat_map, local_diffusion_rules, neighbors):
 
 @nb.njit
 def relax_sat_map(old_sat_map, diffusion_rules, ice_map, boundary_array, neighbor_array, l):
+    """ JESUS CHRIST FIGURE THIS OUT LMAO.
+
+    """
     new_sat_map = old_sat_map.copy()
 
     for line in range(1,l):
@@ -210,8 +351,26 @@ def relax_sat_map(old_sat_map, diffusion_rules, ice_map, boundary_array, neighbo
     return new_sat_map
 
 
+# This needed to be coded since njit does not yet support np.allclose or np.isclose
 @nb.njit
 def has_converged(sat_1, sat_2, epsilon):
+    """ Function that allows for an element-wise convergence assessment
+    of two arrays of the form |a-b| < epsilon.
+
+    Arguments
+    ---------
+    sat_1 : array(float, 2d)
+        The first array to be compared.
+    sat_2 : array(float, 2d)
+        The second array to be compared.
+    epsilon : float
+        The maximum allowed difference in the convergence criterion.
+
+    Return
+    ------
+    The truth status of the convergence: `True` if all element-wise 
+    differences are smaller than epsilon, `False` or else. (bool)
+    """
     array_shape = np.shape(sat_1)
 
     for i in range(array_shape[0]):
@@ -222,4 +381,8 @@ def has_converged(sat_1, sat_2, epsilon):
     return True
 
 
-# def
+# def find_opposing_cells(line, col, local_neighbors):
+#     opposing_cells = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
+    
+    
+#     return None

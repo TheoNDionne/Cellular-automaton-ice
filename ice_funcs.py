@@ -11,6 +11,15 @@ import numba as nb
 
 
 """###############################################################
+                    Physics-based functions
+###############################################################"""
+
+
+def attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
+    max_amplitude*np.exp(-kink*sat) ############################## NOT SURE THIS IS OK
+
+
+"""###############################################################
                     Initializer functions
 ###############################################################"""
 
@@ -39,6 +48,7 @@ def initialize_sat_map(l, w, initial_sat):
             sat_map[line, col] = initial_sat
 
     return sat_map
+
 
 #### MAYBE USE JIT HERE FOR CONSISTENCY??
 def construct_minimal_ice_map(l, w):
@@ -278,7 +288,7 @@ def construct_default_diffusion_rules(l, w):
         0
     ])
     
-    diffusion_rules = np.empty((l-1, w-1, 6))
+    diffusion_rules = np.empty((l, w, 6))
 
     # fill out cells pertaining to flush left cells
     for line in range(1, l-4):
@@ -303,12 +313,12 @@ def construct_default_diffusion_rules(l, w):
 
 
 @nb.njit
-def diffuse_cell(old_sat_map, local_diffusion_rules, neighbors):
+def diffuse_cell(sat_map, local_diffusion_rules, neighbors):
     """ Returns the value of a cell after one step of the diffusion process.
 
     Arguments
     ---------
-    old_sat_map : array(float, 2d)
+    sat_map : array(float, 2d)
         The saturation field before the diffusion step.
     local_diffusion_rules : array(float, 1d)
         The local diffusion rules as a slice of diffusion_rules[i,j,:].
@@ -325,30 +335,30 @@ def diffuse_cell(old_sat_map, local_diffusion_rules, neighbors):
         line = int(neighbors[i,0])
         col = int(neighbors[i,1])
 
-        new_sat += old_sat_map[line, col]*local_diffusion_rules[i]
+        new_sat += sat_map[line, col]*local_diffusion_rules[i]
         
     return new_sat
 
 
-@nb.njit
-def relax_sat_map(old_sat_map, diffusion_rules, ice_map, boundary_array, neighbor_array, l):
-    """ JESUS CHRIST FIGURE THIS OUT LMAO.
+# @nb.njit
+# def relax_sat_map(old_sat_map, diffusion_rules, ice_map, boundary_array, neighbor_array, l):
+#     """ JESUS CHRIST FIGURE THIS OUT LMAO.
 
-    """
-    new_sat_map = old_sat_map.copy()
+#     """
+#     new_sat_map = old_sat_map.copy()
 
-    for line in range(1,l):
-        for col in range((line+1)//2):
-            # Checks if the cell is not an 'ice cell' or a 'boundary cell'
-            if ice_map[line, col] == False and boundary_array[line, col] == 0:
-                new_sat_map[line, col] = diffuse_cell(
-                    old_sat_map, 
-                    diffusion_rules[line, col, :], 
-                    neighbor_array[line, col, :, :]
-                )
+#     for line in range(1,l):
+#         for col in range((line+1)//2):
+#             # Checks if the cell is not an 'ice cell' or a 'boundary cell'
+#             if ice_map[line, col] == False and boundary_array[line, col] == 0:
+#                 new_sat_map[line, col] = diffuse_cell(
+#                     old_sat_map, 
+#                     diffusion_rules[line, col, :], 
+#                     neighbor_array[line, col, :, :]
+#                 )
 
 
-    return new_sat_map
+#     return new_sat_map
 
 
 # This needed to be coded since njit does not yet support np.allclose or np.isclose
@@ -381,8 +391,141 @@ def has_converged(sat_1, sat_2, epsilon):
     return True
 
 
-# def find_opposing_cells(line, col, local_neighbors):
-#     opposing_cells = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
+@nb.njit
+def calculate_sat_opp(sat_map, ice_map, local_neighbors):
+    opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
+    opp_cell_counter = 0
+    opp_cell_total = 0.0
+
+    for i in range(np.shape(local_neighbors)):
+        neighbor_line = local_neighbors[i,0]
+        neighbor_col = local_neighbors[i,1]
+
+        opp_line = local_neighbors[opposing_indices[i],0]
+        opp_col = local_neighbors[opposing_indices[i],1]
+
+        if ice_map[neighbor_line, neighbor_col] == True and ice_map[opp_line, opp_col] == False:
+            opp_cell_total += sat_map[opp_line, opp_col]
+            opp_cell_counter += 1
+
+    return opp_cell_total / opp_cell_counter # returns the average of the 'opposing' cells        
+
+
+# def apply_boundary_condition():
+#     # sigma = sigma_opp/(1+ alpha(sigma_old)G_b*Dx/X_0)
+
+def get_opp_neighbor_indices(ice_map, local_neighbors):
+    opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
+    local_opp_array = np.full(3, np.nan)
+
+    opps_detected = 0
+    for i in range(np.shape(local_neighbors)[0]):
+        neighbor_line = local_neighbors[i,0]
+        neighbor_col = local_neighbors[i,1]
+
+        opp_line = local_neighbors[opposing_indices[i],0]
+        opp_col = local_neighbors[opposing_indices[i],1]
+
+        if ice_map[neighbor_line, neighbor_col] == True and ice_map[opp_line, opp_col] == False:
+            local_opp_array[opps_detected] = opposing_indices[i] # adds opposing 'neighbor index'
+            opps_detected += 1
+
+    return local_opp_array
+
+
+def distinguish_cells(ice_map, boundary_map, l):
+    X_normal = []
+    Y_normal = []
     
+    X_boundary = []
+    Y_boundary = []
+
+    for line in range(1,l):
+        for col in range((line+1)//2):
+            if ice_map[line, col]:
+                if boundary_map[line, col] == 0:
+                    X_normal.append(line)
+                    Y_normal.append(col)
+                else:
+                    X_boundary.append(line)
+                    Y_boundary.append(col)
+
+    normal_cells = np.transpose(np.array([X_normal, Y_normal]))
+    boundary_cells = np.transpose(np.array([X_boundary, Y_boundary]))
     
-#     return None
+    return normal_cells, boundary_cells
+
+
+def construct_opp_array(boundary_cells, ice_map, neighbor_array):
+    array_length = np.shape(boundary_cells)[0]
+    opp_array = np.empty((array_length, 3)) 
+    
+    for i in range(array_length):
+        line = int(boundary_cells[i,0])
+        col = int(boundary_cells[i,1])
+        local_neighbors = neighbor_array[line, col, :, :]
+
+        opp_array[i,:] = get_opp_neighbor_indices(ice_map, local_neighbors)
+
+    return opp_array
+
+
+def calculate_sat_opp_average(sat_map, local_neighbors, local_opps):
+    sat_sum = 0
+    opp_counter = 0
+
+    # loops over the 'opposing' cells
+    for neighbor_index in local_opps:
+        if not np.isnan(neighbor_index):
+            opp_counter += 1 # increments the total count of opps
+            opp_line = local_neighbors[neighbor_index, 0]
+            opp_col = local_neighbors[neighbor_index, 1]
+
+            sat_sum += sat_map[opp_line, opp_col]
+
+    return sat_sum / opp_counter # returns the average of opposing saturations
+
+
+def apply_boundary_condition(line, col, sat_map, local_neighbors, local_opps, boundary_map, D_x, G_b=1, X_0=1):
+    local_sat = sat_map[line, col]
+    kink_number = boundary_map[line, col]
+    sat_opp = calculate_sat_opp_average(sat_map, local_neighbors, local_opps)
+
+    alpha = attachment_coefficient_with_kink(local_sat, kink_number)
+
+    return sat_opp/(1 + alpha*G_b*D_x/X_0) # returns the new saturation of the boundary cell
+
+
+def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, diffusion_rules):
+    """ JESUS CHRIST FIGURE THIS OUT LMAO.
+
+    """
+    new_sat_map = old_sat_map.copy()
+
+    normal_cell_amount = np.shape(normal_cells)[0]
+    boundary_cell_amount = np.shape(boundary_cells)[0]
+
+    # diffuse all normal cells previously found
+    for i in range(normal_cell_amount):
+        line = int(normal_cells[i,0])
+        col = int(normal_cells[i,1])
+
+        local_neighbors = neighbor_array[line, col, :, :]
+        local_diffusion_rules = diffusion_rules[line, col, :]
+
+        new_sat_map[line, col] = diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
+
+    # application of boundary conditions to 
+    for i in range(boundary_cell_amount):
+        line = int(normal_cells[i,0])
+        col = int(normal_cells[i,1])
+
+        local_neighbors = neighbor_array[line, col, :, :]
+        local_diffusion_rules = diffusion_rules[line, col, :]
+        
+        pass # Apply boundary conditions
+
+    return new_sat_map
+
+
+# Think of growth steps

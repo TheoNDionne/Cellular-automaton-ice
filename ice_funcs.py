@@ -25,7 +25,7 @@ def attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
 
 
 @nb.njit
-def initialize_sat_map(l, w, initial_sat):
+def initialize_sat_map(l, w, initial_sat=1):
     """ Function that initializes the saturation map at a 
     constant value `initial_sat`.
 
@@ -190,7 +190,7 @@ def construct_neighbor_array(l, w):
 @nb.njit
 def construct_boundary_map(ice_map, neighbor_array):
     """ Function that constructs a map of all boudary pixels. The number 
-    ascribed to each cell is the number of nearest neighbors (AKA: the kink neighbor).
+    ascribed to each cell is the number of nearest neighbors (AKA: the kink number).
 
     Arguments
     ---------
@@ -206,7 +206,7 @@ def construct_boundary_map(ice_map, neighbor_array):
     ice cells themselves). (array(int, 2d))
     """
     l = np.shape(ice_map)[0]
-    boundary_map = np.full_like(ice_map, 0, dtype=np.int8)
+    boundary_map = np.full((l, (l+1)//2), 0)
 
     for line in range(l):
         for col in range((l - line + 1)//2):
@@ -246,7 +246,7 @@ def construct_default_diffusion_rules(l, w):
     w : int
         Total width of the restricted simulation zone. 
 
-    Retour
+    Return
     ------
     Returns the set of diffusion rules for the model (array(float, 3d)).
     Array is indexed as Arr[i,j,k], where:
@@ -515,7 +515,7 @@ def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array
 
         new_sat_map[line, col] = diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
 
-    # application of boundary conditions to 
+    # application of boundary conditions to cells
     for i in range(boundary_cell_amount):
         line = int(normal_cells[i,0])
         col = int(normal_cells[i,1])

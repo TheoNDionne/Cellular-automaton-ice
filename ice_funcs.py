@@ -12,11 +12,58 @@ import numba as nb
 
 """###############################################################
                     Physics-based functions
+            (all based on [arXiv:1910.06389, chap.5])
 ###############################################################"""
 
 
-def attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
-    max_amplitude*np.exp(-kink*sat) ############################## NOT SURE THIS IS OK
+def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
+    """
+    
+    """
+    return max_amplitude*np.exp(-1/(kink*sat)) 
+
+
+def calculate_local_growth_velocity(sat, v_kin, kink):
+    """
+
+    """
+    alpha = calculate_attachment_coefficient_with_kink(sat, kink)
+
+    return alpha*v_kin*sat
+
+
+def calculate_growth_time(sat, v_kin, kink, f_b, D_x, H_b=1):
+    """
+    
+    """
+    v_growth = calculate_local_growth_velocity(sat, v_kin, kink)
+    growth_time_increment = H_b*D_x*(1-f_b)/v_growth
+
+    return growth_time_increment
+
+
+def get_min_growth_time(filling_timing_array, boundary_cells):
+    """
+    
+    """
+    boundary_cell_amount = np.shape(boundary_cells)[0]
+    growth_time_array = np.empty(boundary_cell_amount)
+        
+    for i in range(boundary_cell_amount):
+        growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+
+    minimum_growth_time = np.min(growth_time_array)
+
+    return minimum_growth_time
+
+
+def filling_factor_step(min_growth_time, H_b=1):
+    """
+    dfaskjdf;ajdf;lkajsd;fkljas;dlfkja;lkdfja;ldjf;alsdkjf;laskdjfa
+    """
+# OOF FIGURE THIS ONE OUT
+
+    return None
 
 
 """###############################################################
@@ -528,4 +575,31 @@ def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array
     return new_sat_map
 
 
+
 # Think of growth steps
+
+"""###############################################################
+                        Growth utilities
+###############################################################"""
+
+
+"""
+#### DO THING THAT INITIALIZES THE FILLING ARRAY AND THE TIME ARRAY
+"""
+
+def update_filling_factor():
+    """
+    
+    """
+    return None
+
+
+def update_filling_array(filling_array, boundary_cells):
+    """
+        REFERENCE OFF OF BOUNDARY CELLS 
+    """
+
+    for cell_coords in boundary_cells:
+        pass ######################FIGURE THIS OUT
+
+    return None ##########################FIGURE THIS OUT

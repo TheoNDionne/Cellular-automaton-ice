@@ -4,66 +4,29 @@ Functions used to simulate the formation of a C6v symmetric snowflakes.
 *** Re-implementation of bits of code found in numpy are due to ***
 *** restricted numpy support in numba.                          ***
 
+NOTE: To keep track of a hexagonal grid with rectangular arrays, one 
+must come up with a mapping that preserves nearest neighbors. The mapping 
+used in these functions is the same as the one used by K.G. Librecht in
+Snow Crystals, i.e.:
+
+         _____        
+        /     \                           _______ _______ _______
+  _____/   0   \_____                    |       |       |       |                   
+ /     \       /     \                   |       |   0   |   1   | 
+/   5   \_____/   1   \                  |_______|_______|_______|
+\       /     \       /                  |       |       |       |
+ \_____/   X   \_____/         ====>     |   5   |   X   |   2   |
+ /     \       /     \                   |_______|_______|_______|                       
+/   4   \_____/   2   \                  |       |       |       |
+\       /     \       /                  |   4   |   3   |       |
+ \_____/   3   \_____/                   |_______|_______|_______|
+       \       /
+        \_____/
+
 """
 
 import numpy as np
 import numba as nb
-
-
-"""###############################################################
-                    Physics-based functions
-            (all based on [arXiv:1910.06389, chap.5])
-###############################################################"""
-
-
-def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
-    """
-    
-    """
-    return max_amplitude*np.exp(-1/(kink*sat)) 
-
-
-def calculate_local_growth_velocity(sat, v_kin, kink):
-    """
-
-    """
-    alpha = calculate_attachment_coefficient_with_kink(sat, kink)
-
-    return alpha*v_kin*sat
-
-
-def calculate_growth_time(sat, v_kin, kink, f_b, D_x, H_b=1):
-    """
-    
-    """
-    v_growth = calculate_local_growth_velocity(sat, v_kin, kink)
-    growth_time_increment = H_b*D_x*(1-f_b)/v_growth
-
-    return growth_time_increment
-
-
-def get_min_growth_time(filling_timing_array, boundary_cells):
-    """
-    
-    """
-    boundary_cell_amount = np.shape(boundary_cells)[0]
-    growth_time_array = np.empty(boundary_cell_amount)
-        
-    for i in range(boundary_cell_amount):
-        growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
-
-    minimum_growth_time = np.min(growth_time_array)
-
-    return minimum_growth_time
-
-
-def filling_factor_step(min_growth_time, H_b=1):
-    """
-    dfaskjdf;ajdf;lkajsd;fkljas;dlfkja;lkdfja;ldjf;alsdkjf;laskdjfa
-    """
-# OOF FIGURE THIS ONE OUT
-
-    return None
 
 
 """###############################################################
@@ -88,13 +51,8 @@ def initialize_sat_map(l, w, initial_sat=1):
     ------
     The initialized saturation map. (array(float, 2d))
     """ 
-    sat_map = np.zeros((l,w), dtype=np.float64)
 
-    for line in range(l):
-        for col in range((l - line + 1)//2):
-            sat_map[line, col] = initial_sat
-
-    return sat_map
+    return np.full((l,w), initial_sat, dtype=np.float64)
 
 
 #### MAYBE USE JIT HERE FOR CONSISTENCY??
@@ -114,7 +72,7 @@ def construct_minimal_ice_map(l, w):
     ------
     The minimal possible ice map. (array(bool, 2d))
     """
-    ice_map = np.full((l, w), False, dtype=bool)
+    ice_map = np.full((l, w), False, dtype=bool) # initialize 'empty' ice_map
 
     # minimum amount of initial ice that doesn't brick the model
     minimal_ice_coords = np.array([
@@ -125,7 +83,7 @@ def construct_minimal_ice_map(l, w):
     ])
 
     for coords in minimal_ice_coords:
-        ice_map[coords[0], coords[1]] = True
+        ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
 
     return ice_map
 
@@ -176,6 +134,7 @@ def get_neighbors(line, col, l):
     - k : 'neighbor index' (6 possibilities for hexagonal cells).
     - l : toggle between line and column of neighbor at index `k`.
     """
+    # relative positions of nearest neighbors in grid
     relative_nearest_neighbors = np.array([
         [-1,0],
         [-1,1],
@@ -273,6 +232,63 @@ def construct_boundary_map(ice_map, neighbor_array):
             boundary_map[line, col] = neighbor_counter
 
     return boundary_map
+
+
+"""###############################################################
+                    Physics-based functions
+            (all based on [arXiv:1910.06389, chap.5])
+###############################################################"""
+
+
+
+def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
+    """
+    
+    """
+    return max_amplitude*np.exp(-1/(kink*sat)) 
+
+
+def calculate_local_growth_velocity(sat, v_kin, kink):
+    """
+
+    """
+    alpha = calculate_attachment_coefficient_with_kink(sat, kink)
+
+    return alpha*v_kin*sat
+
+
+def calculate_growth_time(sat, v_kin, kink, f_b, D_x, H_b=1):
+    """
+    
+    """
+    v_growth = calculate_local_growth_velocity(sat, v_kin, kink)
+    growth_time_increment = H_b*D_x*(1-f_b)/v_growth
+
+    return growth_time_increment
+
+
+def get_min_growth_time(filling_timing_array, boundary_cells):
+    """
+    
+    """
+    boundary_cell_amount = np.shape(boundary_cells)[0]
+    growth_time_array = np.empty(boundary_cell_amount)
+        
+    for i in range(boundary_cell_amount):
+        growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+
+    minimum_growth_time = np.min(growth_time_array)
+
+    return minimum_growth_time
+
+
+def filling_factor_step(min_growth_time, H_b=1):
+    """
+    dfaskjdf;ajdf;lkajsd;fkljas;dlfkja;lkdfja;ldjf;alsdkjf;laskdjfa
+    """
+# OOF FIGURE THIS ONE OUT
+
+    return None
 
 
 """###############################################################
@@ -387,27 +403,6 @@ def diffuse_cell(sat_map, local_diffusion_rules, neighbors):
     return new_sat
 
 
-# @nb.njit
-# def relax_sat_map(old_sat_map, diffusion_rules, ice_map, boundary_array, neighbor_array, l):
-#     """ JESUS CHRIST FIGURE THIS OUT LMAO.
-
-#     """
-#     new_sat_map = old_sat_map.copy()
-
-#     for line in range(1,l):
-#         for col in range((line+1)//2):
-#             # Checks if the cell is not an 'ice cell' or a 'boundary cell'
-#             if ice_map[line, col] == False and boundary_array[line, col] == 0:
-#                 new_sat_map[line, col] = diffuse_cell(
-#                     old_sat_map, 
-#                     diffusion_rules[line, col, :], 
-#                     neighbor_array[line, col, :, :]
-#                 )
-
-
-#     return new_sat_map
-
-
 # This needed to be coded since njit does not yet support np.allclose or np.isclose
 @nb.njit
 def has_converged(sat_1, sat_2, epsilon):
@@ -438,30 +433,37 @@ def has_converged(sat_1, sat_2, epsilon):
     return True
 
 
-@nb.njit
-def calculate_sat_opp(sat_map, ice_map, local_neighbors):
-    opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
-    opp_cell_counter = 0
-    opp_cell_total = 0.0
+# ###################### NOT SURE STILL NEEDED ##########################
+# @nb.njit
+# def calculate_sat_opp(sat_map, ice_map, local_neighbors):
+#     """ Function that calculates the 
+    
+#     """
+#     opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
+#     opp_cell_counter = 0
+#     opp_cell_total = 0.0
 
-    for i in range(np.shape(local_neighbors)):
-        neighbor_line = local_neighbors[i,0]
-        neighbor_col = local_neighbors[i,1]
+#     for i in range(np.shape(local_neighbors)):
+#         neighbor_line = local_neighbors[i,0]
+#         neighbor_col = local_neighbors[i,1]
 
-        opp_line = local_neighbors[opposing_indices[i],0]
-        opp_col = local_neighbors[opposing_indices[i],1]
+#         opp_line = local_neighbors[opposing_indices[i],0]
+#         opp_col = local_neighbors[opposing_indices[i],1]
 
-        if ice_map[neighbor_line, neighbor_col] == True and ice_map[opp_line, opp_col] == False:
-            opp_cell_total += sat_map[opp_line, opp_col]
-            opp_cell_counter += 1
+#         if ice_map[neighbor_line, neighbor_col] == True and ice_map[opp_line, opp_col] == False:
+#             opp_cell_total += sat_map[opp_line, opp_col]
+#             opp_cell_counter += 1
 
-    return opp_cell_total / opp_cell_counter # returns the average of the 'opposing' cells        
-
+#     return opp_cell_total / opp_cell_counter # returns the average of the 'opposing' cells        
+# #################################################################################
 
 # def apply_boundary_condition():
 #     # sigma = sigma_opp/(1+ alpha(sigma_old)G_b*Dx/X_0)
 
 def get_opp_neighbor_indices(ice_map, local_neighbors):
+    """A function that returns up to the three 
+    
+    """
     opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
     local_opp_array = np.full(3, np.nan)
 
@@ -538,7 +540,7 @@ def apply_boundary_condition(line, col, sat_map, local_neighbors, local_opps, bo
     kink_number = boundary_map[line, col]
     sat_opp = calculate_sat_opp_average(sat_map, local_neighbors, local_opps)
 
-    alpha = attachment_coefficient_with_kink(local_sat, kink_number)
+    alpha = calculate_attachment_coefficient_with_kink(local_sat, kink_number)
 
     return sat_opp/(1 + alpha*G_b*D_x/X_0) # returns the new saturation of the boundary cell
 

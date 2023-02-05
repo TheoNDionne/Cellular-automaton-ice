@@ -10,16 +10,16 @@ used in these functions is the same as the one used by K.G. Librecht in
 Snow Crystals, i.e.:
 
          _____        
-        /     \                           _______ _______ _______
-  _____/   0   \_____                    |       |       |       |                   
- /     \       /     \                   |       |   0   |   1   | 
-/   5   \_____/   1   \                  |_______|_______|_______|
-\       /     \       /                  |       |       |       |
- \_____/   X   \_____/         ====>     |   5   |   X   |   2   |
- /     \       /     \                   |_______|_______|_______|                       
-/   4   \_____/   2   \                  |       |       |       |
-\       /     \       /                  |   4   |   3   |       |
- \_____/   3   \_____/                   |_______|_______|_______|
+        /     \                            _______ _______ _______
+  _____/   0   \_____                     |       |       |       |                   
+ /     \       /     \                    |       |   0   |   1   | 
+/   5   \_____/   1   \                   |_______|_______|_______|
+\       /     \       /                   |       |       |       |
+ \_____/   X   \_____/         ====>      |   5   |   X   |   2   |
+ /     \       /     \                    |_______|_______|_______|                       
+/   4   \_____/   2   \                   |       |       |       |
+\       /     \       /                   |   4   |   3   |       |
+ \_____/   3   \_____/                    |_______|_______|_______|
        \       /
         \_____/
 
@@ -545,7 +545,7 @@ def apply_boundary_condition(line, col, sat_map, local_neighbors, local_opps, bo
     return sat_opp/(1 + alpha*G_b*D_x/X_0) # returns the new saturation of the boundary cell
 
 
-def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, diffusion_rules):
+def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, diffusion_rules, boundary_map, D_x):
     """ JESUS CHRIST FIGURE THIS OUT LMAO.
 
     """
@@ -564,15 +564,24 @@ def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array
 
         new_sat_map[line, col] = diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
 
-    # application of boundary conditions to cells
+    # application of boundary conditions to cells, I guess
     for i in range(boundary_cell_amount):
-        line = int(normal_cells[i,0])
-        col = int(normal_cells[i,1])
+        line = int(boundary_cells[i,0])
+        col = int(boundary_cells[i,1])
 
         local_neighbors = neighbor_array[line, col, :, :]
         local_diffusion_rules = diffusion_rules[line, col, :]
+        local_opps = opp_array[i,:]
         
-        pass # Apply boundary conditions
+        new_sat_map[line, col] = apply_boundary_condition(
+            line, 
+            col, 
+            old_sat_map, 
+            local_neighbors, 
+            local_opps, 
+            boundary_map, 
+            D_x
+        )
 
     return new_sat_map
 

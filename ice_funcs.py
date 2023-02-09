@@ -95,7 +95,9 @@ def construct_minimal_ice_map(l, w):
                     General finding utilities
 ###############################################################"""
 
-
+####################################################################################
+##################################### MAKE THIS SO CLASS EVENTUALLY INITIALIZES USEFUL STUFF ON INIT
+####################################################################################
 @nb.experimental.jitclass({
     "L" : nb.int32,
     "W" : nb.int32
@@ -117,7 +119,8 @@ class GeneralUtilities:
         self.L = L
         self.W = (self.L+1)//2
 
-    def is_legit_cell(self, line, col):
+
+    def _is_legit_cell(self, line, col):
         """ Function that verified that provided coordinates are 
         part of the model.
         
@@ -134,7 +137,7 @@ class GeneralUtilities:
         """
         return line<self.L and col<(self.L - line + 1)//2 and line>=0 and col>=0
 
-    def get_neighbors(self, line, col):
+    def _get_neighbors(self, line, col):
         """ Function that gets nearest neighbors of a hexagonal cell
         in the simulation model.
 
@@ -171,7 +174,7 @@ class GeneralUtilities:
             neighbor_line = line + relative_nearest_neighbors[i,0]
             neighbor_col = col + relative_nearest_neighbors[i,1]
 
-            if self.is_legit_cell(neighbor_line, neighbor_col):
+            if self._is_legit_cell(neighbor_line, neighbor_col):
                 absolute_nearest_neighbors[i, :] = [neighbor_line, neighbor_col]
             else:
                 absolute_nearest_neighbors[i, :] = [np.nan, np.nan]
@@ -202,10 +205,125 @@ class GeneralUtilities:
 
         for line in range(self.L):
             for col in range((self.L - line + 1)//2):
-                neighbor_array[line, col, :, :] = self.get_neighbors(line, col)
+                neighbor_array[line, col, :, :] = self._get_neighbors(line, col)
 
         return neighbor_array
 
+    def construct_default_diffusion_rules(self):
+        """ Constructs the 'vanilla' diffusion rules using the discretized
+        version of the diffusion equation.
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone. 
+
+        Return
+        ------
+        Returns the set of diffusion rules for the model (array(float, 3d)).
+        Array is indexed as Arr[i,j,k], where:
+        - i : line of the cell to diffuse.
+        - j : column of the cell to diffuse.
+        - k : coefficient by which to multiply saturation situated at 
+            neighbor index `k`.
+        """
+        # diffusion for average-cell
+        inner_rule_set = np.ones(6)/6
+        
+        #diffusion for the upper ragged cells
+        upper_ragged_rule_set = np.array([
+            1/6,
+            1/6,
+            0,
+            1/6,
+            1/6,
+            1/3
+        ])
+
+        #diffusion for the lower ragged cells
+        lower_ragged_rule_set = np.array([
+            1/3,
+            0,
+            0,
+            0,
+            1/3,
+            1/3
+        ])
+
+        # diffusion for the flush left cells
+        flush_left_rule_set = np.array([
+            1/6,
+            1/3,
+            1/3,
+            1/6,
+            0,
+            0
+        ])
+        
+        diffusion_rules = np.empty((self.L, self.W, 6))
+
+        # fill out cells pertaining to flush left cells
+        for line in range(1, self.L-4):
+            diffusion_rules[line, 0, :] = flush_left_rule_set
+
+        # fill out all lower ragged cells
+        for col in range(2, self.W-1):
+            line = self.L - 2*col - 1
+            diffusion_rules[line, col, :] = lower_ragged_rule_set
+
+        # fill out all upper ragged cells
+        for col in range(2, self.W-1):
+            line = self.L - 2*col - 2
+            diffusion_rules[line, col, :] = upper_ragged_rule_set
+
+        # fill out the rest
+        for col in range(1, self.W-1):
+            for line in range(1, self.L - 2*col - 2):
+                diffusion_rules[line, col, :] = inner_rule_set
+
+        return diffusion_rules
+
+    def construct_boundary_map(self, ice_map, neighbor_array): ################################################################# DUMP NEIGHBOR_ARRAY IN SELF
+        """ Function that constructs a map of all boudary pixels. The number 
+        ascribed to each cell is the number of nearest neighbors (AKA: the kink number).
+
+        Arguments
+        ---------
+        ice_map : array(bool, 2d)
+            The boolean map that represents the physical location of ice cells.
+        neighbor_array : array(float, 4d)
+            The array representing neigbors in the model of the form produced by 
+            construct_neighbor_array().
+        
+        Return
+        ------
+        The two dimensional map of the amount of neighboring ice cells (excluding 
+        ice cells themselves). (array(int, 2d))
+        """
+        l = np.shape(ice_map)[0]
+        boundary_map = np.full((l, (l+1)//2), 0)
+
+        for line in range(l):
+            for col in range((l - line + 1)//2):
+                neighbor_coords = neighbor_array[line, col, :, :] # returns 6x2 array
+                
+                neighbor_counter = 0
+
+                if ice_map[line, col] != True:
+                    for i in range(np.shape(neighbor_coords)[0]):
+                        neighbor_line = int(neighbor_coords[i,0])
+                        neighbor_col = int(neighbor_coords[i,1])
+
+                        if not np.isnan(neighbor_line):
+                            if ice_map[neighbor_line, neighbor_col] == True:
+                                neighbor_counter += 1
+
+                boundary_map[line, col] = neighbor_counter
+
+        return boundary_map
 
 # @nb.njit
 # def is_legit_cell(line, col, L):
@@ -307,124 +425,124 @@ class GeneralUtilities:
 ###############################################################"""
 
 
-@nb.njit
-def construct_boundary_map(ice_map, neighbor_array):
-    """ Function that constructs a map of all boudary pixels. The number 
-    ascribed to each cell is the number of nearest neighbors (AKA: the kink number).
+# @nb.njit
+# def construct_boundary_map(ice_map, neighbor_array):
+#     """ Function that constructs a map of all boudary pixels. The number 
+#     ascribed to each cell is the number of nearest neighbors (AKA: the kink number).
 
-    Arguments
-    ---------
-    ice_map : array(bool, 2d)
-        The boolean map that represents the physical location of ice cells.
-    neighbor_array : array(float, 4d)
-        The array representing neigbors in the model of the form produced by 
-        construct_neighbor_array().
+#     Arguments
+#     ---------
+#     ice_map : array(bool, 2d)
+#         The boolean map that represents the physical location of ice cells.
+#     neighbor_array : array(float, 4d)
+#         The array representing neigbors in the model of the form produced by 
+#         construct_neighbor_array().
     
-    Return
-    ------
-    The two dimensional map of the amount of neighboring ice cells (excluding 
-    ice cells themselves). (array(int, 2d))
-    """
-    l = np.shape(ice_map)[0]
-    boundary_map = np.full((l, (l+1)//2), 0)
+#     Return
+#     ------
+#     The two dimensional map of the amount of neighboring ice cells (excluding 
+#     ice cells themselves). (array(int, 2d))
+#     """
+#     l = np.shape(ice_map)[0]
+#     boundary_map = np.full((l, (l+1)//2), 0)
 
-    for line in range(l):
-        for col in range((l - line + 1)//2):
-            neighbor_coords = neighbor_array[line, col, :, :] # returns 6x2 array
+#     for line in range(l):
+#         for col in range((l - line + 1)//2):
+#             neighbor_coords = neighbor_array[line, col, :, :] # returns 6x2 array
             
-            neighbor_counter = 0
+#             neighbor_counter = 0
 
-            if ice_map[line, col] != True:
-                for i in range(np.shape(neighbor_coords)[0]):
-                    neighbor_line = int(neighbor_coords[i,0])
-                    neighbor_col = int(neighbor_coords[i,1])
+#             if ice_map[line, col] != True:
+#                 for i in range(np.shape(neighbor_coords)[0]):
+#                     neighbor_line = int(neighbor_coords[i,0])
+#                     neighbor_col = int(neighbor_coords[i,1])
 
-                    if not np.isnan(neighbor_line):
-                        if ice_map[neighbor_line, neighbor_col] == True:
-                            neighbor_counter += 1
+#                     if not np.isnan(neighbor_line):
+#                         if ice_map[neighbor_line, neighbor_col] == True:
+#                             neighbor_counter += 1
 
-            boundary_map[line, col] = neighbor_counter
+#             boundary_map[line, col] = neighbor_counter
 
-    return boundary_map
+#     return boundary_map
 
 
-@nb.njit
-def construct_default_diffusion_rules(l, w):
-    """ Constructs the 'vanilla' diffusion rules using the discretized
-    version of the diffusion equation.
+# @nb.njit
+# def construct_default_diffusion_rules(l, w):
+#     """ Constructs the 'vanilla' diffusion rules using the discretized
+#     version of the diffusion equation.
 
-    Arguments
-    ---------
-    l : int
-        Total length of the restricted simulation zone (1/12th) 
-        of total snowflake.
-    w : int
-        Total width of the restricted simulation zone. 
+#     Arguments
+#     ---------
+#     l : int
+#         Total length of the restricted simulation zone (1/12th) 
+#         of total snowflake.
+#     w : int
+#         Total width of the restricted simulation zone. 
 
-    Return
-    ------
-    Returns the set of diffusion rules for the model (array(float, 3d)).
-    Array is indexed as Arr[i,j,k], where:
-    - i : line of the cell to diffuse.
-    - j : column of the cell to diffuse.
-    - k : coefficient by which to multiply saturation situated at 
-          neighbor index `k`.
-    """
-    # diffusion for average-cell
-    inner_rule_set = np.ones(6)/6
+#     Return
+#     ------
+#     Returns the set of diffusion rules for the model (array(float, 3d)).
+#     Array is indexed as Arr[i,j,k], where:
+#     - i : line of the cell to diffuse.
+#     - j : column of the cell to diffuse.
+#     - k : coefficient by which to multiply saturation situated at 
+#           neighbor index `k`.
+#     """
+#     # diffusion for average-cell
+#     inner_rule_set = np.ones(6)/6
     
-    #diffusion for the upper ragged cells
-    upper_ragged_rule_set = np.array([
-        1/6,
-        1/6,
-        0,
-        1/6,
-        1/6,
-        1/3
-    ])
+#     #diffusion for the upper ragged cells
+#     upper_ragged_rule_set = np.array([
+#         1/6,
+#         1/6,
+#         0,
+#         1/6,
+#         1/6,
+#         1/3
+#     ])
 
-    #diffusion for the lower ragged cells
-    lower_ragged_rule_set = np.array([
-        1/3,
-        0,
-        0,
-        0,
-        1/3,
-        1/3
-    ])
+#     #diffusion for the lower ragged cells
+#     lower_ragged_rule_set = np.array([
+#         1/3,
+#         0,
+#         0,
+#         0,
+#         1/3,
+#         1/3
+#     ])
 
-    # diffusion for the flush left cells
-    flush_left_rule_set = np.array([
-        1/6,
-        1/3,
-        1/3,
-        1/6,
-        0,
-        0
-    ])
+#     # diffusion for the flush left cells
+#     flush_left_rule_set = np.array([
+#         1/6,
+#         1/3,
+#         1/3,
+#         1/6,
+#         0,
+#         0
+#     ])
     
-    diffusion_rules = np.empty((l, w, 6))
+#     diffusion_rules = np.empty((l, w, 6))
 
-    # fill out cells pertaining to flush left cells
-    for line in range(1, l-4):
-        diffusion_rules[line, 0, :] = flush_left_rule_set
+#     # fill out cells pertaining to flush left cells
+#     for line in range(1, l-4):
+#         diffusion_rules[line, 0, :] = flush_left_rule_set
 
-    # fill out all lower ragged cells
-    for col in range(2, w-1):
-        line = l - 2*col - 1
-        diffusion_rules[line, col, :] = lower_ragged_rule_set
+#     # fill out all lower ragged cells
+#     for col in range(2, w-1):
+#         line = l - 2*col - 1
+#         diffusion_rules[line, col, :] = lower_ragged_rule_set
 
-    # fill out all upper ragged cells
-    for col in range(2, w-1):
-        line = l - 2*col - 2
-        diffusion_rules[line, col, :] = upper_ragged_rule_set
+#     # fill out all upper ragged cells
+#     for col in range(2, w-1):
+#         line = l - 2*col - 2
+#         diffusion_rules[line, col, :] = upper_ragged_rule_set
 
-    # fill out the rest
-    for col in range(1, w-1):
-        for line in range(1, l - 2*col - 2):
-            diffusion_rules[line, col, :] = inner_rule_set
+#     # fill out the rest
+#     for col in range(1, w-1):
+#         for line in range(1, l - 2*col - 2):
+#             diffusion_rules[line, col, :] = inner_rule_set
 
-    return diffusion_rules
+#     return diffusion_rules
 
 
 

@@ -92,16 +92,15 @@ def construct_minimal_ice_map(l, w):
 
 
 """###############################################################
-                    Neighbor finding utilities
+                    General finding utilities
 ###############################################################"""
 
-NeighborUtilities_spec = {
+
+@nb.experimental.jitclass({
     "L" : nb.int32,
     "W" : nb.int32
-}
-
-@nb.experimental.jitclass(NeighborUtilities_spec)
-class NeighborUtilities:
+})
+class GeneralUtilities:
     """ Class that allows to     
     """
 
@@ -349,131 +348,6 @@ def construct_boundary_map(ice_map, neighbor_array):
     return boundary_map
 
 
-"""###############################################################
-                    Physics-based functions
-            (all based on [arXiv:1910.06389, chap.5])
-###############################################################"""
-
-
-@nb.experimental.jitclass({
-    "D_x" : nb.float32,
-    "v_kin" : nb.float32,
-    "max_alpha" : nb.float32,
-    "G" : nb.float32,
-    "H" : nb.float32
-})
-class PhysicsUtilities:
-
-    def __init__(self, D_x, v_kin, max_alpha=1, G=1, H=1):
-        self.D_x = D_x
-        self.v_kin = v_kin
-        self.max_alpha = max_alpha
-        self.G = G
-        self.H = H
-
-    def calculate_attachment_coefficient_with_kink(self, sat, kink):
-        """
-        
-        """
-        return self.max_alpha*np.exp(-1/(kink*sat))    
-
-    def calculate_local_growth_velocity(self, sat, kink):
-        """
-
-        """
-        alpha = self.calculate_attachment_coefficient_with_kink(sat, kink)
-
-        return alpha*self.v_kin*sat
-
-    def calculate_growth_time(self, sat, kink, f_b):
-        """
-        
-        """
-        v_growth = self.calculate_local_growth_velocity(sat, kink)
-        growth_time_increment = self.H*self.D_x*(1-f_b)/v_growth
-
-        return growth_time_increment
-
-    def get_min_growth_time(filling_timing_array, boundary_cells):
-        """
-        
-        """
-        boundary_cell_amount = np.shape(boundary_cells)[0]
-        growth_time_array = np.empty(boundary_cell_amount)
-            
-        for i in range(boundary_cell_amount):
-            growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
-
-        minimum_growth_time = np.min(growth_time_array)
-
-        return minimum_growth_time
-
-    ####################################################################
-    ############################ FILL THIS OUT #########################
-    ####################################################################
-    def filling_factor_step(min_growth_time):
-        """
-        
-        """
-
-
-        return None
-
-# def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
-#     """
-    
-#     """
-#     return max_amplitude*np.exp(-1/(kink*sat)) 
-
-
-# def calculate_local_growth_velocity(sat, v_kin, kink):
-#     """
-
-#     """
-#     alpha = calculate_attachment_coefficient_with_kink(sat, kink)
-
-#     return alpha*v_kin*sat
-
-
-# def calculate_growth_time(sat, v_kin, kink, f_b, D_x, H_b=1):
-#     """
-    
-#     """
-#     v_growth = calculate_local_growth_velocity(sat, v_kin, kink)
-#     growth_time_increment = H_b*D_x*(1-f_b)/v_growth
-
-#     return growth_time_increment
-
-
-# def get_min_growth_time(filling_timing_array, boundary_cells):
-#     """
-    
-#     """
-#     boundary_cell_amount = np.shape(boundary_cells)[0]
-#     growth_time_array = np.empty(boundary_cell_amount)
-        
-#     for i in range(boundary_cell_amount):
-#         growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
-
-#     minimum_growth_time = np.min(growth_time_array)
-
-#     return minimum_growth_time
-
-
-#def filling_factor_step(min_growth_time, H_b=1):
-#     """
-    
-#     """
-
-
-#     return None
-
-
-"""###############################################################
-                    Diffusion utilities
-###############################################################"""
-
-
 @nb.njit
 def construct_default_diffusion_rules(l, w):
     """ Constructs the 'vanilla' diffusion rules using the discretized
@@ -551,6 +425,151 @@ def construct_default_diffusion_rules(l, w):
             diffusion_rules[line, col, :] = inner_rule_set
 
     return diffusion_rules
+
+
+
+"""###############################################################
+                    Physics-based functions
+            (all based on [arXiv:1910.06389, chap.5])
+###############################################################"""
+
+
+@nb.experimental.jitclass({
+    "D_x" : nb.float32,
+    "v_kin" : nb.float32,
+    "max_alpha" : nb.float32,
+    "X_0" : nb.float32,
+    "G" : nb.float32,
+    "H" : nb.float32
+})
+class PhysicsUtilities:
+
+    def __init__(self, D_x, v_kin, max_alpha=1, X_0=1, G=1, H=1):
+        self.D_x = D_x
+        self.v_kin = v_kin
+        self.max_alpha = max_alpha
+        self.X_0 = X_0
+        self.G = G
+        self.H = H
+
+    def calculate_attachment_coefficient_with_kink(self, sat, kink):
+        """
+        
+        """
+        return self.max_alpha*np.exp(-1/(kink*sat))    
+
+    def calculate_local_growth_velocity(self, sat, kink):
+        """
+
+        """
+        alpha = self.calculate_attachment_coefficient_with_kink(sat, kink)
+
+        return alpha*self.v_kin*sat
+
+    def calculate_growth_time(self, sat, kink, f_b):
+        """
+        
+        """
+        v_growth = self.calculate_local_growth_velocity(sat, kink)
+        growth_time_increment = self.H*self.D_x*(1-f_b)/v_growth
+
+        return growth_time_increment
+
+    def get_min_growth_time(filling_timing_array, boundary_cells):
+        """
+        
+        """
+        boundary_cell_amount = np.shape(boundary_cells)[0]
+        growth_time_array = np.empty(boundary_cell_amount)
+            
+        for i in range(boundary_cell_amount):
+            growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+
+        minimum_growth_time = np.min(growth_time_array)
+
+        return minimum_growth_time
+
+    def filling_factor_step(min_growth_time):
+        """
+        
+        """
+        ####################################################################
+        ############################ FILL THIS OUT #########################
+        ####################################################################
+
+        return None
+
+    def apply_boundary_condition(self, line, col, sat_map, local_neighbors, local_opps, boundary_map):
+        local_sat = sat_map[line, col]
+        kink_number = boundary_map[line, col]
+        sat_opp = calculate_sat_opp_average(sat_map, local_neighbors, local_opps)
+
+        alpha = self.calculate_attachment_coefficient_with_kink(local_sat, kink_number)
+
+        return sat_opp/(1 + alpha*self.G_b*self.D_x/self.X_0) # returns the new saturation of the boundary cell
+
+# def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
+#     """
+    
+#     """
+#     return max_amplitude*np.exp(-1/(kink*sat)) 
+
+
+# def calculate_local_growth_velocity(sat, v_kin, kink):
+#     """
+
+#     """
+#     alpha = calculate_attachment_coefficient_with_kink(sat, kink)
+
+#     return alpha*v_kin*sat
+
+
+# def calculate_growth_time(sat, v_kin, kink, f_b, D_x, H_b=1):
+#     """
+    
+#     """
+#     v_growth = calculate_local_growth_velocity(sat, v_kin, kink)
+#     growth_time_increment = H_b*D_x*(1-f_b)/v_growth
+
+#     return growth_time_increment
+
+
+# def get_min_growth_time(filling_timing_array, boundary_cells):
+#     """
+    
+#     """
+#     boundary_cell_amount = np.shape(boundary_cells)[0]
+#     growth_time_array = np.empty(boundary_cell_amount)
+        
+#     for i in range(boundary_cell_amount):
+#         growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+
+#     minimum_growth_time = np.min(growth_time_array)
+
+#     return minimum_growth_time
+
+
+#def filling_factor_step(min_growth_time, H_b=1):
+#     """
+    
+#     """
+
+
+#     return None
+
+
+"""###############################################################
+                    Diffusion utilities
+###############################################################"""
+
+class DiffusionUtilities:
+    """FILL OUT"""
+
+    def __init__(self):
+        # FILL
+        A = 1
+
+
 
 
 @nb.njit
@@ -686,14 +705,14 @@ def calculate_sat_opp_average(sat_map, local_neighbors, local_opps):
     return sat_sum / opp_counter # returns the average of opposing saturations
 
 
-def apply_boundary_condition(line, col, sat_map, local_neighbors, local_opps, boundary_map, D_x, G_b=1, X_0=1):
-    local_sat = sat_map[line, col]
-    kink_number = boundary_map[line, col]
-    sat_opp = calculate_sat_opp_average(sat_map, local_neighbors, local_opps)
+# def apply_boundary_condition(line, col, sat_map, local_neighbors, local_opps, boundary_map, D_x, G_b=1, X_0=1):
+#     local_sat = sat_map[line, col]
+#     kink_number = boundary_map[line, col]
+#     sat_opp = calculate_sat_opp_average(sat_map, local_neighbors, local_opps)
 
-    alpha = calculate_attachment_coefficient_with_kink(local_sat, kink_number)
+#     alpha = calculate_attachment_coefficient_with_kink(local_sat, kink_number)
 
-    return sat_opp/(1 + alpha*G_b*D_x/X_0) # returns the new saturation of the boundary cell
+#     return sat_opp/(1 + alpha*G_b*D_x/X_0) # returns the new saturation of the boundary cell
 
 
 def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, diffusion_rules, boundary_map, D_x):

@@ -354,10 +354,14 @@ def construct_boundary_map(ice_map, neighbor_array):
             (all based on [arXiv:1910.06389, chap.5])
 ###############################################################"""
 
-##################################################
-######################################## ADD SPEC and JIT
-##################################################
-@nb.experimental.jitclass()
+
+@nb.experimental.jitclass({
+    "D_x" : nb.float32,
+    "v_kin" : nb.float32,
+    "max_alpha" : nb.float32,
+    "G" : nb.float32,
+    "H" : nb.float32
+})
 class PhysicsUtilities:
 
     def __init__(self, D_x, v_kin, max_alpha=1, G=1, H=1):

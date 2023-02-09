@@ -15,7 +15,7 @@ Snow Crystals, i.e.:
  /     \       /     \                    |       |   0   |   1   | 
 /   5   \_____/   1   \                   |_______|_______|_______|
 \       /     \       /                   |       |       |       |
- \_____/   X   \_____/         ====>      |   5   |   X   |   2   |
+ \_____/   X   \_____/       ======>      |   5   |   X   |   2   |
  /     \       /     \                    |_______|_______|_______|                       
 /   4   \_____/   2   \                   |       |       |       |
 \       /     \       /                   |   4   |   3   |       |
@@ -100,7 +100,9 @@ def construct_minimal_ice_map(l, w):
 ####################################################################################
 @nb.experimental.jitclass({
     "L" : nb.int32,
-    "W" : nb.int32
+    "W" : nb.int32,
+    "neighbor_array" : nb.float32[:,:,:,::1],
+    "diffusion_rules" : nb.float32[:,:,::1]
 })
 class GeneralUtilities:
     """ Class that allows to     
@@ -118,6 +120,10 @@ class GeneralUtilities:
         """
         self.L = L
         self.W = (self.L+1)//2
+
+        # 'One time runs' for geometry-dependent utilities
+        self.neighbor_array = self.construct_neighbor_array() # construct neighbor array
+        self.diffusion_rules = self.construct_default_diffusion_rules() # construct diffusion rules
 
 
     def _is_legit_cell(self, line, col):
@@ -201,7 +207,7 @@ class GeneralUtilities:
         - k : 'neighbor index' (6 possibilities for hexagonal cells).
         - l : toggle between line and column of neighbor at index `k`.
         """
-        neighbor_array = np.empty((self.L, self.W, 6, 2))
+        neighbor_array = np.empty((self.L, self.W, 6, 2), dtype=np.float32) # float type to allow np.nan
 
         for line in range(self.L):
             for col in range((self.L - line + 1)//2):
@@ -263,7 +269,7 @@ class GeneralUtilities:
             0
         ])
         
-        diffusion_rules = np.empty((self.L, self.W, 6))
+        diffusion_rules = np.empty((self.L, self.W, 6), dtype=np.float32)
 
         # fill out cells pertaining to flush left cells
         for line in range(1, self.L-4):
@@ -286,7 +292,7 @@ class GeneralUtilities:
 
         return diffusion_rules
 
-    def construct_boundary_map(self, ice_map, neighbor_array): ################################################################# DUMP NEIGHBOR_ARRAY IN SELF
+    def construct_boundary_map(self, ice_map): 
         """ Function that constructs a map of all boudary pixels. The number 
         ascribed to each cell is the number of nearest neighbors (AKA: the kink number).
 
@@ -303,12 +309,11 @@ class GeneralUtilities:
         The two dimensional map of the amount of neighboring ice cells (excluding 
         ice cells themselves). (array(int, 2d))
         """
-        l = np.shape(ice_map)[0]
-        boundary_map = np.full((l, (l+1)//2), 0)
+        boundary_map = np.full((self.L, self.W), 0)
 
-        for line in range(l):
-            for col in range((l - line + 1)//2):
-                neighbor_coords = neighbor_array[line, col, :, :] # returns 6x2 array
+        for line in range(self.L):
+            for col in range((self.L - line + 1)//2):
+                neighbor_coords = self.neighbor_array[line, col, :, :] # returns 6x2 array
                 
                 neighbor_counter = 0
 
@@ -769,7 +774,9 @@ def get_opp_neighbor_indices(ice_map, local_neighbors):
 
     return local_opp_array
 
-
+##############################################################
+################ ONCE A CYCLE, WHERE SHOULD I BAKE THIS IN####
+##############################################################
 def distinguish_cells(ice_map, boundary_map, l):
     X_normal = []
     Y_normal = []
@@ -861,15 +868,16 @@ def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array
         local_diffusion_rules = diffusion_rules[line, col, :]
         local_opps = opp_array[i,:]
         
-        new_sat_map[line, col] = apply_boundary_condition(
-            line, 
-            col, 
-            old_sat_map, 
-            local_neighbors, 
-            local_opps, 
-            boundary_map, 
-            D_x
-        )
+        ###################################################################### ARRANGE THISF ##################################################
+        # new_sat_map[line, col] = apply_boundary_condition(
+        #     line, 
+        #     col, 
+        #     old_sat_map, 
+        #     local_neighbors, 
+        #     local_opps, 
+        #     boundary_map, 
+        #     D_x
+        # )
 
     return new_sat_map
 
@@ -947,3 +955,12 @@ def update_filling_array(filling_array, boundary_cells):
         pass ######################FIGURE THIS OUT
 
     return None ##########################FIGURE THIS OUT
+
+
+
+if __name__ == "__main__":
+    gu = GeneralUtilities(101)
+
+    print(nb.typeof(gu.neighbor_array))
+    # print(nb.typeof(gu.diffusion_rules))
+    print(nb.typeof(gu.neighbor_array))

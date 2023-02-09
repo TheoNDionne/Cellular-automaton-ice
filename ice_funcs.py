@@ -23,6 +23,9 @@ Snow Crystals, i.e.:
        \       /
         \_____/
 
+The number present in the cells indicate the so-called "neighbor index" 
+relative to the central cell denoted by "X".
+
 """
 
 import numpy as np
@@ -92,100 +95,212 @@ def construct_minimal_ice_map(l, w):
                     Neighbor finding utilities
 ###############################################################"""
 
+NeighborUtilities_spec = {
+    "L" : nb.int32,
+    "W" : nb.int32
+}
 
-@nb.njit
-def is_legit_cell(line, col, L):
-    """ Function that verified that provided coordinates are 
-    part of the model.
+@nb.experimental.jitclass(NeighborUtilities_spec)
+class NeighborUtilities:
+    """ Class that allows to     
+    """
+
+    def __init__(self, L):
+        """ Class initializer function.
+        
+        Attributes
+        ----------
+        L : int
+            total length of the 1/12th slice of simulation zone.
+        W : int
+            total width of the 1/12th slice of simulation zone.
+        """
+        self.L = L
+        self.W = (self.L+1)//2
+
+    def is_legit_cell(self, line, col):
+        """ Function that verified that provided coordinates are 
+        part of the model.
+        
+        Arguments
+        ---------
+        line : int
+            The line of the cell to check in the model.
+        col : int
+            The column of the cell to check in the model.
+
+        Return
+        ------
+        Returns if the cell is a legit simulation cell. (bool)
+        """
+        return line<self.L and col<(self.L - line + 1)//2 and line>=0 and col>=0
+
+    def get_neighbors(self, line, col):
+        """ Function that gets nearest neighbors of a hexagonal cell
+        in the simulation model.
+
+        Arguments
+        ---------
+        line : int
+            The line of the cell to check in the model.
+        col : int
+            The column of the cell to check in the model.
+        L : int
+            Total length of the model. 
+
+        Return
+        ------
+        The neighbors of cell at position (line, col) in the model (array(float, 2d)).
+        If there is no neighbor, coords are replaced by `np.nan`. Array of the form 
+        Arr[k,l], where:
+        - k : 'neighbor index' (6 possibilities for hexagonal cells).
+        - l : toggle between line and column of neighbor at index `k`.
+        """
+        # relative positions of nearest neighbors in grid
+        relative_nearest_neighbors = np.array([
+            [-1,0],
+            [-1,1],
+            [0,1],
+            [1,0],
+            [1,-1],
+            [0,-1]
+        ])
+
+        absolute_nearest_neighbors = np.empty((6, 2))
+
+        for i in range(np.shape(relative_nearest_neighbors)[0]):
+            neighbor_line = line + relative_nearest_neighbors[i,0]
+            neighbor_col = col + relative_nearest_neighbors[i,1]
+
+            if self.is_legit_cell(neighbor_line, neighbor_col):
+                absolute_nearest_neighbors[i, :] = [neighbor_line, neighbor_col]
+            else:
+                absolute_nearest_neighbors[i, :] = [np.nan, np.nan]
+
+        return absolute_nearest_neighbors
+
+    def construct_neighbor_array(self):
+        """ Constructs the array of nearest neighbors for all cells in the model.
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone. 
+
+        Return
+        ------
+        Returns a 4d array of neighbor cells for all cells (array(float, 4d)).
+        Array is indexed with the following indexes Arr[i,j,k,l], where:
+        - i : line of the cell for which to get neighbors.
+        - j : column of the cell for which to get neighbors.
+        - k : 'neighbor index' (6 possibilities for hexagonal cells).
+        - l : toggle between line and column of neighbor at index `k`.
+        """
+        neighbor_array = np.empty((self.L, self.W, 6, 2))
+
+        for line in range(self.L):
+            for col in range((self.L - line + 1)//2):
+                neighbor_array[line, col, :, :] = self.get_neighbors(line, col)
+
+        return neighbor_array
+
+
+# @nb.njit
+# def is_legit_cell(line, col, L):
+#     """ Function that verified that provided coordinates are 
+#     part of the model.
     
-    Arguments
-    ---------
-    line : int
-        The line of the cell to check in the model.
-    col : int
-        The column of the cell to check in the model.
+#     Arguments
+#     ---------
+#     line : int
+#         The line of the cell to check in the model.
+#     col : int
+#         The column of the cell to check in the model.
 
-    Return
-    ------
-    Returns if the cell is a legit simulation cell. (bool)
-    """
-    return line<L and col<(L - line + 1)//2 and line>=0 and col>=0
-
-
-@nb.njit
-def get_neighbors(line, col, l):
-    """ Function that gets nearest neighbors of a hexagonal cell
-    in the simulation model.
-
-    Arguments
-    ---------
-    line : int
-        The line of the cell to check in the model.
-    col : int
-        The column of the cell to check in the model.
-    L : int
-        Total length of the model. 
-
-    Return
-    ------
-    The neighbors of cell at position (line, col) in the model (array(float, 2d)).
-    If there is no neighbor, coords are replaced by `np.nan`. Array of the form 
-    Arr[k,l], where:
-    - k : 'neighbor index' (6 possibilities for hexagonal cells).
-    - l : toggle between line and column of neighbor at index `k`.
-    """
-    # relative positions of nearest neighbors in grid
-    relative_nearest_neighbors = np.array([
-        [-1,0],
-        [-1,1],
-        [0,1],
-        [1,0],
-        [1,-1],
-        [0,-1]
-    ])
-
-    absolute_nearest_neighbors = np.empty((6, 2))
-
-    for i in range(np.shape(relative_nearest_neighbors)[0]):
-        neighbor_line = line + relative_nearest_neighbors[i,0]
-        neighbor_col = col + relative_nearest_neighbors[i,1]
-
-        if is_legit_cell(neighbor_line, neighbor_col, l):
-            absolute_nearest_neighbors[i, :] = [neighbor_line, neighbor_col]
-        else:
-            absolute_nearest_neighbors[i, :] = [np.nan, np.nan]
-
-    return absolute_nearest_neighbors
+#     Return
+#     ------
+#     Returns if the cell is a legit simulation cell. (bool)
+#     """
+#     return line<L and col<(L - line + 1)//2 and line>=0 and col>=0
 
 
-@nb.njit
-def construct_neighbor_array(l, w):
-    """ Constructs the array of nearest neighbors for all cells in the model.
+# @nb.njit
+# def get_neighbors(line, col, l):
+#     """ Function that gets nearest neighbors of a hexagonal cell
+#     in the simulation model.
 
-    Arguments
-    ---------
-    l : int
-        Total length of the restricted simulation zone (1/12th) 
-        of total snowflake.
-    w : int
-        Total width of the restricted simulation zone. 
+#     Arguments
+#     ---------
+#     line : int
+#         The line of the cell to check in the model.
+#     col : int
+#         The column of the cell to check in the model.
+#     L : int
+#         Total length of the model. 
 
-    Return
-    ------
-    Returns a 4d array of neighbor cells for all cells (array(float, 4d)).
-    Array is indexed with the following indexes Arr[i,j,k,l], where:
-    - i : line of the cell for which to get neighbors.
-    - j : column of the cell for which to get neighbors.
-    - k : 'neighbor index' (6 possibilities for hexagonal cells).
-    - l : toggle between line and column of neighbor at index `k`.
-    """
-    neighbor_array = np.empty((l, w, 6, 2))
+#     Return
+#     ------
+#     The neighbors of cell at position (line, col) in the model (array(float, 2d)).
+#     If there is no neighbor, coords are replaced by `np.nan`. Array of the form 
+#     Arr[k,l], where:
+#     - k : 'neighbor index' (6 possibilities for hexagonal cells).
+#     - l : toggle between line and column of neighbor at index `k`.
+#     """
+#     # relative positions of nearest neighbors in grid
+#     relative_nearest_neighbors = np.array([
+#         [-1,0],
+#         [-1,1],
+#         [0,1],
+#         [1,0],
+#         [1,-1],
+#         [0,-1]
+#     ])
 
-    for line in range(l):
-        for col in range((l - line + 1)//2):
-            neighbor_array[line, col, :, :] = get_neighbors(line, col, l)
+#     absolute_nearest_neighbors = np.empty((6, 2))
 
-    return neighbor_array
+#     for i in range(np.shape(relative_nearest_neighbors)[0]):
+#         neighbor_line = line + relative_nearest_neighbors[i,0]
+#         neighbor_col = col + relative_nearest_neighbors[i,1]
+
+#         if is_legit_cell(neighbor_line, neighbor_col, l):
+#             absolute_nearest_neighbors[i, :] = [neighbor_line, neighbor_col]
+#         else:
+#             absolute_nearest_neighbors[i, :] = [np.nan, np.nan]
+
+#     return absolute_nearest_neighbors
+
+
+# @nb.njit
+# def construct_neighbor_array(l, w):
+#     """ Constructs the array of nearest neighbors for all cells in the model.
+
+#     Arguments
+#     ---------
+#     l : int
+#         Total length of the restricted simulation zone (1/12th) 
+#         of total snowflake.
+#     w : int
+#         Total width of the restricted simulation zone. 
+
+#     Return
+#     ------
+#     Returns a 4d array of neighbor cells for all cells (array(float, 4d)).
+#     Array is indexed with the following indexes Arr[i,j,k,l], where:
+#     - i : line of the cell for which to get neighbors.
+#     - j : column of the cell for which to get neighbors.
+#     - k : 'neighbor index' (6 possibilities for hexagonal cells).
+#     - l : toggle between line and column of neighbor at index `k`.
+#     """
+#     neighbor_array = np.empty((l, w, 6, 2))
+
+#     for line in range(l):
+#         for col in range((l - line + 1)//2):
+#             neighbor_array[line, col, :, :] = get_neighbors(line, col, l)
+
+#     return neighbor_array
 
 
 """###############################################################
@@ -239,6 +354,9 @@ def construct_boundary_map(ice_map, neighbor_array):
             (all based on [arXiv:1910.06389, chap.5])
 ###############################################################"""
 
+# class PhysicsUtilities:
+
+#     def __init__(self):
 
 
 def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
@@ -403,34 +521,7 @@ def diffuse_cell(sat_map, local_diffusion_rules, neighbors):
     return new_sat
 
 
-# This needed to be coded since njit does not yet support np.allclose or np.isclose
-@nb.njit
-def has_converged(sat_1, sat_2, epsilon):
-    """ Function that allows for an element-wise convergence assessment
-    of two arrays of the form |a-b| < epsilon.
 
-    Arguments
-    ---------
-    sat_1 : array(float, 2d)
-        The first array to be compared.
-    sat_2 : array(float, 2d)
-        The second array to be compared.
-    epsilon : float
-        The maximum allowed difference in the convergence criterion.
-
-    Return
-    ------
-    The truth status of the convergence: `True` if all element-wise 
-    differences are smaller than epsilon, `False` or else. (bool)
-    """
-    array_shape = np.shape(sat_1)
-
-    for i in range(array_shape[0]):
-        for j in range(array_shape[1]):
-            if abs(sat_1[i,j] - sat_2[i,j]) > epsilon:
-                return False
-
-    return True
 
 
 # ###################### NOT SURE STILL NEEDED ##########################
@@ -586,6 +677,41 @@ def execute_relaxation_step(old_sat_map, normal_cells, boundary_cells, opp_array
     return new_sat_map
 
 
+# This needed to be coded since njit does not yet support np.allclose or np.isclose
+@nb.njit
+def has_converged(sat_1, sat_2, epsilon):
+    """ Function that allows for an element-wise convergence assessment
+    of two arrays of the form |a-b| < epsilon.
+
+    Arguments
+    ---------
+    sat_1 : array(float, 2d)
+        The first array to be compared.
+    sat_2 : array(float, 2d)
+        The second array to be compared.
+    epsilon : float
+        The maximum allowed difference in the convergence criterion.
+
+    Return
+    ------
+    The truth status of the convergence: `True` if all element-wise 
+    differences are smaller than epsilon, `False` or else. (bool)
+    """
+    array_shape = np.shape(sat_1)
+
+    for i in range(array_shape[0]):
+        for j in range(array_shape[1]):
+            if abs(sat_1[i,j] - sat_2[i,j]) > epsilon:
+                return False
+
+    return True
+
+
+# FLUSH THIS FUNCTION OUT
+def diffuse_to_convergence():
+    # GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOD
+
+    return None
 
 # Think of growth steps
 

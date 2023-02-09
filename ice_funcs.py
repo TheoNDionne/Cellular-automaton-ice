@@ -354,59 +354,115 @@ def construct_boundary_map(ice_map, neighbor_array):
             (all based on [arXiv:1910.06389, chap.5])
 ###############################################################"""
 
-# class PhysicsUtilities:
+##################################################
+######################################## ADD SPEC and JIT
+##################################################
+@nb.experimental.jitclass()
+class PhysicsUtilities:
 
-#     def __init__(self):
+    def __init__(self, D_x, v_kin, max_alpha=1, G=1, H=1):
+        self.D_x = D_x
+        self.v_kin = v_kin
+        self.max_alpha = max_alpha
+        self.G = G
+        self.H = H
 
-
-def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
-    """
-    
-    """
-    return max_amplitude*np.exp(-1/(kink*sat)) 
-
-
-def calculate_local_growth_velocity(sat, v_kin, kink):
-    """
-
-    """
-    alpha = calculate_attachment_coefficient_with_kink(sat, kink)
-
-    return alpha*v_kin*sat
-
-
-def calculate_growth_time(sat, v_kin, kink, f_b, D_x, H_b=1):
-    """
-    
-    """
-    v_growth = calculate_local_growth_velocity(sat, v_kin, kink)
-    growth_time_increment = H_b*D_x*(1-f_b)/v_growth
-
-    return growth_time_increment
-
-
-def get_min_growth_time(filling_timing_array, boundary_cells):
-    """
-    
-    """
-    boundary_cell_amount = np.shape(boundary_cells)[0]
-    growth_time_array = np.empty(boundary_cell_amount)
+    def calculate_attachment_coefficient_with_kink(self, sat, kink):
+        """
         
-    for i in range(boundary_cell_amount):
-        growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+        """
+        return self.max_alpha*np.exp(-1/(kink*sat))    
 
-    minimum_growth_time = np.min(growth_time_array)
+    def calculate_local_growth_velocity(self, sat, kink):
+        """
 
-    return minimum_growth_time
+        """
+        alpha = self.calculate_attachment_coefficient_with_kink(sat, kink)
+
+        return alpha*self.v_kin*sat
+
+    def calculate_growth_time(self, sat, kink, f_b):
+        """
+        
+        """
+        v_growth = self.calculate_local_growth_velocity(sat, kink)
+        growth_time_increment = self.H*self.D_x*(1-f_b)/v_growth
+
+        return growth_time_increment
+
+    def get_min_growth_time(filling_timing_array, boundary_cells):
+        """
+        
+        """
+        boundary_cell_amount = np.shape(boundary_cells)[0]
+        growth_time_array = np.empty(boundary_cell_amount)
+            
+        for i in range(boundary_cell_amount):
+            growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+
+        minimum_growth_time = np.min(growth_time_array)
+
+        return minimum_growth_time
+
+    ####################################################################
+    ############################ FILL THIS OUT #########################
+    ####################################################################
+    def filling_factor_step(min_growth_time):
+        """
+        
+        """
 
 
-def filling_factor_step(min_growth_time, H_b=1):
-    """
-    dfaskjdf;ajdf;lkajsd;fkljas;dlfkja;lkdfja;ldjf;alsdkjf;laskdjfa
-    """
-# OOF FIGURE THIS ONE OUT
+        return None
 
-    return None
+# def calculate_attachment_coefficient_with_kink(sat, kink, max_amplitude=1):
+#     """
+    
+#     """
+#     return max_amplitude*np.exp(-1/(kink*sat)) 
+
+
+# def calculate_local_growth_velocity(sat, v_kin, kink):
+#     """
+
+#     """
+#     alpha = calculate_attachment_coefficient_with_kink(sat, kink)
+
+#     return alpha*v_kin*sat
+
+
+# def calculate_growth_time(sat, v_kin, kink, f_b, D_x, H_b=1):
+#     """
+    
+#     """
+#     v_growth = calculate_local_growth_velocity(sat, v_kin, kink)
+#     growth_time_increment = H_b*D_x*(1-f_b)/v_growth
+
+#     return growth_time_increment
+
+
+# def get_min_growth_time(filling_timing_array, boundary_cells):
+#     """
+    
+#     """
+#     boundary_cell_amount = np.shape(boundary_cells)[0]
+#     growth_time_array = np.empty(boundary_cell_amount)
+        
+#     for i in range(boundary_cell_amount):
+#         growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+
+#     minimum_growth_time = np.min(growth_time_array)
+
+#     return minimum_growth_time
+
+
+#def filling_factor_step(min_growth_time, H_b=1):
+#     """
+    
+#     """
+
+
+#     return None
 
 
 """###############################################################
@@ -728,6 +784,16 @@ def update_filling_factor():
     """
     
     """
+    return None
+
+######################################### NOT DONE
+def update_time_array(time_array, boundary_cells):
+
+    for coords in boundary_cells:
+        delta_time = 0 ############################# MAKE THIS TING WORK
+        time_array[coords[0], coords[1]] += delta_time
+    
+
     return None
 
 

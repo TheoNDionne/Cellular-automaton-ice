@@ -33,65 +33,6 @@ import numba as nb
 
 
 """###############################################################
-                    Initializer functions
-###############################################################"""
-
-
-@nb.njit
-def initialize_sat_map(l, w, initial_sat=1):
-    """ Function that initializes the saturation map at a 
-    constant value `initial_sat`.
-
-    Arguments
-    ---------
-    l : int
-        Total length of the restricted simulation zone (1/12th) 
-        of total snowflake.
-    w : int
-        Total width of the restricted simulation zone.
-
-    Return
-    ------
-    The initialized saturation map. (array(float, 2d))
-    """ 
-
-    return np.full((l,w), initial_sat, dtype=np.float64)
-
-
-#### MAYBE USE JIT HERE FOR CONSISTENCY??
-def construct_minimal_ice_map(l, w):
-    """ Function that constructs the minimal ice map defined 
-    in the model (4 cells).
-
-    Arguments
-    ---------
-    l : int
-        Total length of the restricted simulation zone (1/12th) 
-        of total snowflake.
-    w : int
-        Total width of the restricted simulation zone.
-    
-    Return
-    ------
-    The minimal possible ice map. (array(bool, 2d))
-    """
-    ice_map = np.full((l, w), False, dtype=bool) # initialize 'empty' ice_map
-
-    # minimum amount of initial ice that doesn't brick the model
-    minimal_ice_coords = np.array([
-        [l-1,0],
-        [l-2,0],
-        [l-3,0],
-        [l-3,1]
-    ])
-
-    for coords in minimal_ice_coords:
-        ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
-
-    return ice_map
-
-
-"""###############################################################
                     General utilities
 ###############################################################"""
 
@@ -123,6 +64,7 @@ class GeneralUtilities:
         self.neighbor_array = self._construct_neighbor_array() # construct neighbor array
         self.diffusion_rules = self._construct_default_diffusion_rules() # construct diffusion rules
 
+    ### PRIVATE METHODS ###
 
     def _is_legit_cell(self, line, col):
         """ Function that verified that provided coordinates are 
@@ -290,6 +232,8 @@ class GeneralUtilities:
 
         return diffusion_rules
 
+    ### PUBLIC METHODS ###
+
     def construct_boundary_map(self, ice_map): 
         """ Function that constructs a map of all boudary pixels. The number 
         ascribed to each cell is the number of nearest neighbors (AKA: the kink number).
@@ -327,6 +271,56 @@ class GeneralUtilities:
                 boundary_map[line, col] = neighbor_counter
 
         return boundary_map
+
+    def initialize_sat_map(self, initial_sat=1):
+        """ Function that initializes the saturation map at a 
+        constant value `initial_sat`.
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone.
+
+        Return
+        ------
+        The initialized saturation map. (array(float, 2d))
+        """ 
+
+        return np.full((self.L, self.W), initial_sat, dtype=np.float64)
+
+    def construct_minimal_ice_map(self):
+        """ Function that constructs the minimal ice map defined 
+        in the model (4 cells).
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone.
+        
+        Return
+        ------
+        The minimal possible ice map. (array(bool, 2d))
+        """
+        ice_map = np.full((self.L, self.W), False) # initialize 'empty' ice_map
+
+        # minimum amount of initial ice that doesn't brick the model
+        minimal_ice_coords = np.array([
+            [self.L-1,0],
+            [self.L-2,0],
+            [self.L-3,0],
+            [self.L-3,1]
+        ])
+
+        for coords in minimal_ice_coords:
+            ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
+
+        return ice_map
 
 
 
@@ -411,6 +405,14 @@ class PhysicsUtilities:
         alpha = self.calculate_attachment_coefficient_with_kink(local_sat, kink_number)
 
         return sat_opp/(1 + alpha*self.G_b*self.D_x/self.X_0) # returns the new saturation of the boundary cell
+
+    def calculate_filling_factor_increment(self):
+        ##################### FILL OUT #######################
+        return None
+
+    def calculate_growth_time_increment(self):
+        ##################### FILL OUT #######################
+        return None
 
 # Define the type of an instance of PhysicsUtilities class to be passed as an argument to constructor of other classes
 PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
@@ -617,34 +619,60 @@ class SaturationRelaxationUtilities:
 """
 #### DO THING THAT INITIALIZES THE FILLING ARRAY AND THE TIME ARRAY
 """
+@nb.experimental.jitclass({
+    "PhysicsUtilities_instance" : PhysicsUtilities_instance_type
+})
+class GrowthUtilities:
+    ############################ FILL THIS OUT #############################
+    def __init__(self, PhysicsUtilities_instance):
+        self.PU = PhysicsUtilities_instance # PU
+        self.filling_array = None
+        self.timing_array = None
 
-def update_filling_factor():
-    """
-    
-    """
-    return None
-
-######################################### NOT DONE
-def update_time_array(time_array, boundary_cells):
-
-    for coords in boundary_cells:
-        delta_time = 0 ############################# MAKE THIS TING WORK
-        time_array[coords[0], coords[1]] += delta_time
-    
-
-    return None
+    ### PRIVATE METHODS ###
 
 
-def update_filling_array(filling_array, boundary_cells):
-    """
-        REFERENCE OFF OF BOUNDARY CELLS 
-    """
+    # def _update_filling_factor():
+    #     ##################### FILL OUT #######################
+        
+        
+    #     return None
 
-    for cell_coords in boundary_cells:
-        pass ######################FIGURE THIS OUT
+    # def _update_growth_time():
+    #     ##################### FILL OUT #######################
+    #     return None
 
-    return None ##########################FIGURE THIS OUT
+    ### PUBLIC METHODS ###
 
+    def update_filling_array(self, boundary_cells):
+        ################ Update the filling array by calling thing #############
+
+        for coords in boundary_cells:
+            line = coords[0]
+            col = coords[1]
+
+            self.filling_array[line, col] += self.PU.calculate_filling_factor_increment() ######################### FILL
+
+        return None 
+
+    def update_timing_array(self, boundary_cells):
+        
+        boundary_cell_amount = np.shape(boundary_cells)[0]
+        time_increments = np.empty(boundary_cell_amount)
+
+        for i in range(boundary_cell_amount):
+            line = boundary_cells[i,0]
+            col = boundary_cells[i,1]
+
+            growth_time_increment = self.PU.calculate_growth_time_increment() ######################### FILL ######################
+
+            time_increments[i] = growth_time_increment
+
+            self.timing_array[line, col] += growth_time_increment 
+
+        ####################################### MINIMUM TIME INCREMENT IN HERE ? #############################
+
+        return None
 
 
 if __name__ == "__main__":
@@ -652,16 +680,13 @@ if __name__ == "__main__":
 
     gu = GeneralUtilities(L)
 
-    ice_map = construct_minimal_ice_map(L, (L+1)//2)
-    print(ice_map[-7:, :7])
-    print(gu.construct_boundary_map(ice_map)[-5:,:5])
-    print(gu.construct_boundary_map(ice_map)[-5:,:5])
+    ice_map_test = gu.construct_minimal_ice_map()
+    ice_map_test[L-4, 0] = True 
 
+    sat_map_test = gu.initialize_sat_map()
+    boundary_map_test = gu.construct_boundary_map(ice_map_test)
 
-    # bm_2 = gu.construct_boundary_map(ice_map)
-
-    # print(bm_2[-5:, :5])
-
-    # print(nb.typeof(gu.neighbor_array))
-    # # print(nb.typeof(gu.diffusion_rules))
-    # print(nb.typeof(gu.neighbor_array))
+    print(ice_map_test[-5:,:5])
+    print(sat_map_test[-5:,:5])
+    print(boundary_map_test[-5:,:5])
+    

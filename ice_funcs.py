@@ -1,8 +1,38 @@
 """
-Functions used to simulate the formation of a C6v symmetric snowflakes.
+Code used to simulate the formation of a C6v symmetric snowflakes.
 
-*** Re-implementation of bits of code found in numpy are due to ***
-*** restricted numpy support in numba.                          ***
+!!! Re-implementation of bits of code found in numpy are due to !!!
+!!! restricted numpy support in numba.                          !!!
+
+Classes
+-------
+GeneralUtilities:
+    A class that principally contains methods that allow to 
+    generate the default neighbor finding array and calculate 
+    the positions of boundary cells (with the amount of nearest
+    neighbors).
+
+PhysicsUtilities:
+    A class that groups methods that execute "physical calculations", 
+    such as the boundary growth velocity. Usually, methods there 
+    depend on physical parameters.
+
+SaturationRelaxationUtilities:
+    A class that allows for two major things:
+        - Relaxing the saturation field according to the diffusion 
+          equation.
+        - Applying the physical boundary conditions to the ice-vapor 
+          boundary cells.
+
+GrowthUtilities:
+    A class that allows for the growth of the crystal by evolving the 'filling factor'
+    of each boundary cell.
+
+SnowflakeSimulation:
+    A class that comprises the general parts of the simulation such 
+    as the map of ice cells and the map of water saturation in the
+    simulation.  
+
 
 NOTE: To keep track of a hexagonal grid with rectangular arrays, one 
 must come up with a mapping that preserves nearest neighbors. The mapping 
@@ -25,7 +55,6 @@ Snow Crystals, i.e.:
 
 The number present in the cells indicate the so-called "neighbor index" 
 relative to the central cell denoted by "X".
-
 """
 
 import numpy as np
@@ -48,7 +77,7 @@ class GeneralUtilities:
     """
 
     def __init__(self, L):
-        """ Class initializer function.
+        """ Class initializer method.
         
         Attributes
         ----------
@@ -272,57 +301,6 @@ class GeneralUtilities:
 
         return boundary_map
 
-    def initialize_sat_map(self, initial_sat=1):
-        """ Function that initializes the saturation map at a 
-        constant value `initial_sat`.
-
-        Arguments
-        ---------
-        l : int
-            Total length of the restricted simulation zone (1/12th) 
-            of total snowflake.
-        w : int
-            Total width of the restricted simulation zone.
-
-        Return
-        ------
-        The initialized saturation map. (array(float, 2d))
-        """ 
-
-        return np.full((self.L, self.W), initial_sat, dtype=np.float64)
-
-    def construct_minimal_ice_map(self):
-        """ Function that constructs the minimal ice map defined 
-        in the model (4 cells).
-
-        Arguments
-        ---------
-        l : int
-            Total length of the restricted simulation zone (1/12th) 
-            of total snowflake.
-        w : int
-            Total width of the restricted simulation zone.
-        
-        Return
-        ------
-        The minimal possible ice map. (array(bool, 2d))
-        """
-        ice_map = np.full((self.L, self.W), False) # initialize 'empty' ice_map
-
-        # minimum amount of initial ice that doesn't brick the model
-        minimal_ice_coords = np.array([
-            [self.L-1,0],
-            [self.L-2,0],
-            [self.L-3,0],
-            [self.L-3,1]
-        ])
-
-        for coords in minimal_ice_coords:
-            ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
-
-        return ice_map
-
-
 
 """###############################################################
                     Physics-based functions
@@ -387,16 +365,6 @@ class PhysicsUtilities:
 
         return minimum_growth_time
 
-    def filling_factor_step(min_growth_time):
-        """
-        
-        """
-        ####################################################################
-        ############################ FILL THIS OUT #########################
-        ####################################################################
-
-        return None
-
     def apply_boundary_condition(self, line, col, sat_map, local_neighbors, local_opps, boundary_map):
         local_sat = sat_map[line, col]
         kink_number = boundary_map[line, col]
@@ -406,15 +374,26 @@ class PhysicsUtilities:
 
         return sat_opp/(1 + alpha*self.G_b*self.D_x/self.X_0) # returns the new saturation of the boundary cell
 
-    def calculate_filling_factor_increment(self):
-        ##################### FILL OUT #######################
-        return None
+    def calculate_filling_factor_increment(self, sat, kink, dt_min):
+        """
+        """
+        v_growth = self.calculate_local_growth_velocity(sat, kink) 
 
-    def calculate_growth_time_increment(self):
-        ##################### FILL OUT #######################
-        return None
+        # inspired by K.G. Libbrecht
+        return v_growth*dt_min/(self.H*self.D_x)
 
-# Define the type of an instance of PhysicsUtilities class to be passed as an argument to constructor of other classes
+    def calculate_growth_time_increment(self, sat, kink, filling_factor):
+        """
+        """
+        v_growth = self.calculate_local_growth_velocity(sat, kink)
+        
+        # inspired by K.G. Libbrecht
+        return self.H*self.D_x*(1 - filling_factor)/v_growth 
+
+
+"""#######################################
+     Define type of PhysicsUtilities
+#######################################"""
 PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
 PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
 
@@ -620,43 +599,33 @@ class SaturationRelaxationUtilities:
 #### DO THING THAT INITIALIZES THE FILLING ARRAY AND THE TIME ARRAY
 """
 @nb.experimental.jitclass({
-    "PhysicsUtilities_instance" : PhysicsUtilities_instance_type
+    "L" : nb.int32,
+    "W" : nb.int32,
+    "PhysicsUtilities_instance" : PhysicsUtilities_instance_type,
+    "filling_array" : nb.float32[:,::1],
+    "timing_array" : nb.float32[:,::1],
+    "minimum_time_increment" : nb.float32
 })
 class GrowthUtilities:
-    ############################ FILL THIS OUT #############################
-    def __init__(self, PhysicsUtilities_instance):
+    ############################ FILL OUT COMMENTS #############################
+    def __init__(self, L, PhysicsUtilities_instance):
+        self.L = L
+        self.W = (L+1)//2
         self.PU = PhysicsUtilities_instance # PU
-        self.filling_array = None
-        self.timing_array = None
+        self.filling_array = np.full((self.L, self.W), 0.0, dtype=nb.float32)
+        self.timing_array = np.full((self.L, self.W), 0.0, dtype=nb.float32)
+
+        self.minimum_time_increment = 0.0 # initialize minimum time increment
 
     ### PRIVATE METHODS ###
 
-
-    # def _update_filling_factor():
-    #     ##################### FILL OUT #######################
-        
-        
-    #     return None
-
-    # def _update_growth_time():
-    #     ##################### FILL OUT #######################
-    #     return None
-
     ### PUBLIC METHODS ###
 
-    def update_filling_array(self, boundary_cells):
-        ################ Update the filling array by calling thing #############
-
-        for coords in boundary_cells:
-            line = coords[0]
-            col = coords[1]
-
-            self.filling_array[line, col] += self.PU.calculate_filling_factor_increment() ######################### FILL
-
-        return None 
-
-    def update_timing_array(self, boundary_cells):
+    def update_timing_array(self, boundary_cells, sat_map, boundary_map):
+        """
         
+        """
+
         boundary_cell_amount = np.shape(boundary_cells)[0]
         time_increments = np.empty(boundary_cell_amount)
 
@@ -664,15 +633,104 @@ class GrowthUtilities:
             line = boundary_cells[i,0]
             col = boundary_cells[i,1]
 
-            growth_time_increment = self.PU.calculate_growth_time_increment() ######################### FILL ######################
+            # calculate growth time increment
+            growth_time_increment = self.PU.calculate_growth_time_increment(
+                sat_map[line,col], 
+                boundary_map[line,col], 
+                self.filling_array[line,col]
+            )
+            time_increments[i] = growth_time_increment # add growth time increment to a temp array
 
-            time_increments[i] = growth_time_increment
+            self.timing_array[line, col] += growth_time_increment  # add time increment to timing array
 
-            self.timing_array[line, col] += growth_time_increment 
-
-        ####################################### MINIMUM TIME INCREMENT IN HERE ? #############################
+        # get minimum time increment and update minimum_time_increment attribute
+        self.minimum_time_increment = np.min(time_increments) 
 
         return None
+
+    def update_filling_array(self, boundary_cells, sat_map, boundary_map):
+        """
+        
+        """
+
+        for coords in boundary_cells: # only execute over boundary cells
+            line = coords[0] # boundary cell line
+            col = coords[1] # boundary cell col
+
+            self.filling_array[line, col] += self.PU.calculate_filling_factor_increment(
+                sat_map[line,col], 
+                boundary_map[line, col], 
+                self.minimum_time_increment
+                )
+
+        return None 
+
+    
+########################################## NUMBAFY THIS ###################################
+class SnowflakeSimulation:
+
+    def __init__(self, L, initial_sat=1): ########################################## add all simulation parameters later
+        self.L = L
+        self.W = (L+1)//2
+        self.initial_sat = initial_sat
+
+        # initialize default ice map
+        self.ice_map = self._construct_minimal_ice_map()
+
+        # initialize default saturation map
+        self.sat_map = self._initialize_sat_map()
+
+    ### Private methods ###
+
+    def _initialize_sat_map(self):
+        """ Function that initializes the saturation map at a 
+        constant value `initial_sat`.
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone.
+
+        Return
+        ------
+        The initialized saturation map. (array(float, 2d))
+        """ 
+
+        return np.full((self.L, self.W), self.initial_sat, dtype=np.float64)
+
+    def _construct_minimal_ice_map(self):
+        """ Function that constructs the minimal ice map defined 
+        in the model (4 cells).
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone.
+        
+        Return
+        ------
+        The minimal possible ice map. (array(bool, 2d))
+        """
+        ice_map = np.full((self.L, self.W), False) # initialize 'empty' ice_map
+
+        # minimum amount of initial ice that doesn't brick the model
+        minimal_ice_coords = np.array([
+            [self.L-1,0],
+            [self.L-2,0],
+            [self.L-3,0],
+            [self.L-3,1]
+        ])
+
+        for coords in minimal_ice_coords:
+            ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
+
+        return ice_map
 
 
 if __name__ == "__main__":

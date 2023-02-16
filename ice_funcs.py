@@ -302,9 +302,14 @@ class GeneralUtilities:
         return boundary_map
 
 
+# Define type of GeneralUtilities class instance
+GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
+GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
+
+
 """###############################################################
                     Physics-based functions
-            (all based on [arXiv:1910.06389, chap.5])
+         (mostly based on [arXiv:1910.06389, chap.5])
 ###############################################################"""
 
 
@@ -391,11 +396,10 @@ class PhysicsUtilities:
         return self.H*self.D_x*(1 - filling_factor)/v_growth 
 
 
-"""#######################################
-     Define type of PhysicsUtilities
-#######################################"""
+# Define type of PhysicsUtilities class instance
 PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
 PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
+
 
 """###############################################################
                     Diffusion utilities
@@ -589,6 +593,10 @@ class SaturationRelaxationUtilities:
         return None
 
 
+# Define type of SaturationRelaxationUtilities class instance
+SaturationRelaxationUtilities_instance_type = nb.deferred_type() # initialize SaturationRelaxationUtilities instance type
+SaturationRelaxationUtilities_instance_type.define(SaturationRelaxationUtilities.class_type.instance_type) # define SaturationRelaxationUtilities' type as it's own type
+
 
 """###############################################################
                         Growth utilities
@@ -665,14 +673,26 @@ class GrowthUtilities:
 
         return None 
 
+
+# Define type of GrowthUtilities class instance
+GrowthUtilities_instance_type = nb.deferred_type() # initialize GrowthUtilities instance type
+GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) # define GrowthUtilities' type as it's own type
     
+
+"""###############################################################
+                        Simulation class
+###############################################################"""
+
+
 ########################################## NUMBAFY THIS ###################################
 class SnowflakeSimulation:
 
-    def __init__(self, L, initial_sat=1): ########################################## add all simulation parameters later
+    def __init__(self, L, max_cycles=100, initial_sat=1): ########################################## add all simulation parameters later
         self.L = L
         self.W = (L+1)//2
         self.initial_sat = initial_sat
+
+        self.max_cycles = max_cycles
 
         # initialize default ice map
         self.ice_map = self._construct_minimal_ice_map()
@@ -731,6 +751,27 @@ class SnowflakeSimulation:
             ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
 
         return ice_map
+
+    ### Public methods ###
+
+    
+
+
+
+    def run_simulation(self): ################################# FILL OUT ARGUMENTS
+        
+        for c in range(self.max_cycles):
+            
+            # STEP I : Relax sat_map
+
+            # STEP II : Update filling, timing and ice
+
+            # STEP III : Update boundary array *****and things like that*****
+
+            # STEP IV : Assess if up to spec
+            
+            pass ######################################################### REMOVE
+        return None ######################################################## CHANGE
 
 
 if __name__ == "__main__":

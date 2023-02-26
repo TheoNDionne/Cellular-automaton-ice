@@ -288,13 +288,13 @@ class GeneralUtilities:
                 
                 neighbor_counter = 0
 
-                if ice_map[line, col] != True:
+                if not ice_map[line, col]:
                     for i in range(np.shape(neighbor_coords)[0]):
-                        neighbor_line = int(neighbor_coords[i,0]) # converts line to integer value
-                        neighbor_col = int(neighbor_coords[i,1]) # converts col to integer value
+                        neighbor_line = neighbor_coords[i,0]
+                        neighbor_col = neighbor_coords[i,1]
 
                         if not np.isnan(neighbor_line):
-                            if ice_map[neighbor_line, neighbor_col] == True:
+                            if ice_map[int(neighbor_line), int(neighbor_col)] == True:
                                 neighbor_counter += 1
 
                 boundary_map[line, col] = neighbor_counter
@@ -322,7 +322,6 @@ GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type)
     "H" : nb.float32
 })
 class PhysicsUtilities:
-
 
     def __init__(self, D_x, v_kin, max_alpha=1, X_0=1, G=1, H=1):
         self.D_x = D_x
@@ -418,19 +417,24 @@ PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type)
 #####################################################
 
 @nb.experimental.jitclass({
-    "PhysicsUtilities_inst" : PhysicsUtilities_instance_type,
-    "max_iter" : nb.float32
+    "L" : nb.int32,
+    "PU" : PhysicsUtilities_instance_type,
+    "max_iter" : nb.int32
 })
 class SaturationRelaxationUtilities:
     """FILL OUT"""
 
-    def __init__(self, PhysicsUtilities_inst, max_iter):
+    def __init__(self, L, PhysicsUtilities_inst, max_iter):
         """
         """
+        self.L = L
+
         self.PU = PhysicsUtilities_inst
+        self.max_iter = max_iter
 
+    ##### Private Methods #####
 
-    def diffuse_cell(self, sat_map, local_diffusion_rules, local_neighbors):
+    def _diffuse_cell(self, sat_map, local_diffusion_rules, local_neighbors):
         """ Returns the value of a cell after one step of the diffusion process.
 
         Arguments
@@ -457,16 +461,16 @@ class SaturationRelaxationUtilities:
         return new_sat
 
 
-    def distinguish_cells(self, ice_map, boundary_map, l):
+    def _distinguish_cells(self, ice_map, boundary_map):
         X_normal = []
         Y_normal = []
         
         X_boundary = []
         Y_boundary = []
 
-        for line in range(1,l):
-            for col in range((line+1)//2):
-                if ice_map[line, col]:
+        for line in range(1,self.L):
+            for col in range((self.L-line+1)//2):
+                if not ice_map[line, col]:
                     if boundary_map[line, col] == 0:
                         X_normal.append(line)
                         Y_normal.append(col)
@@ -480,7 +484,7 @@ class SaturationRelaxationUtilities:
         return normal_cells, boundary_cells
 
 
-    def get_opp_neighbor_indices(self, ice_map, local_neighbors):
+    def _get_opp_neighbor_indices(self, ice_map, local_neighbors):
         """ A function that returns up to the three neighbor indices corresponding 
         to the three possible neighbor cells.
         """
@@ -502,7 +506,7 @@ class SaturationRelaxationUtilities:
         return local_opp_array
 
     
-    def construct_opp_array(self, boundary_cells, ice_map, neighbor_array):
+    def _construct_opp_array(self, boundary_cells, ice_map, neighbor_array):
         """ Constructs an array that contains the coordinates of 'opposing cells'
         """
         array_length = np.shape(boundary_cells)[0]
@@ -513,12 +517,12 @@ class SaturationRelaxationUtilities:
             col = int(boundary_cells[i,1])
             local_neighbors = neighbor_array[line, col, :, :]
 
-            opp_array[i,:] = self.get_opp_neighbor_indices(ice_map, local_neighbors)
+            opp_array[i,:] = self._get_opp_neighbor_indices(ice_map, local_neighbors)
 
         return opp_array
 
 
-    def calculate_sat_opp_average(self, sat_map, local_neighbors, local_opps): ################################### WHISHY WASHY FUNCTION CALL ###########
+    def _calculate_sat_opp_average(self, sat_map, local_neighbors, local_opps): ################################### WHISHY WASHY FUNCTION CALL ###########
         """ Calculates the average saturation of opposing cells located at the 
         
         """
@@ -537,7 +541,7 @@ class SaturationRelaxationUtilities:
         return sat_sum / opp_counter # returns the average of opposing saturations
 
 
-    def execute_relaxation_step(self, old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, diffusion_rules, boundary_map):
+    def _execute_relaxation_step(self, old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, diffusion_rules, boundary_map):
         """ JESUS CHRIST FIGURE THIS OUT LMAO.
 
         """
@@ -555,7 +559,7 @@ class SaturationRelaxationUtilities:
             local_neighbors = neighbor_array[line, col, :, :]
             local_diffusion_rules = diffusion_rules[line, col, :]
 
-            new_sat_map[line, col] = self.diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
+            new_sat_map[line, col] = self._diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
 
         # application of boundary conditions to cells, I guess
         for i in range(boundary_cell_amount):
@@ -566,7 +570,7 @@ class SaturationRelaxationUtilities:
             local_diffusion_rules = diffusion_rules[line, col, :]
             local_opps = opp_array[i,:]
 
-            sat_opp_avg = self.calculate_sat_opp_average(old_sat_map, local_neighbors, local_opps)
+            sat_opp_avg = self._calculate_sat_opp_average(old_sat_map, local_neighbors, local_opps)
             
             new_sat_map[line, col] = self.PU.apply_boundary_condition(
                 line, 
@@ -579,7 +583,7 @@ class SaturationRelaxationUtilities:
         return new_sat_map
 
 
-    def has_converged(self, sat_1, sat_2, epsilon):
+    def _has_converged(self, sat_1, sat_2, epsilon):
         """ Function that allows for an element-wise convergence assessment
         of two arrays of the form |a-b| < epsilon.
 
@@ -607,6 +611,8 @@ class SaturationRelaxationUtilities:
         return True # returns True if all elements of the array are withing convergence
 
 
+##### Public Methods #####
+
     def diffuse_to_convergence(self, sat_map, max_iter, epsilon):
         """ Repeats the relaxation steps until the desired convergence is achieved.
         """
@@ -614,8 +620,8 @@ class SaturationRelaxationUtilities:
         old_sat = sat_map.copy() # initializes the "old sat"
 
         for i in range(max_iter):
-            new_sat = self.execute_relaxation_step(old_sat)
-            if self.has_converged(new_sat, old_sat, epsilon):
+            new_sat = self._execute_relaxation_step(old_sat)
+            if self._has_converged(new_sat, old_sat, epsilon):
                 return new_sat, True # returns reasonably converged saturation map and success status
 
         return new_sat, False # returns unconverged array with failure status
@@ -809,14 +815,15 @@ if __name__ == "__main__":
     L = 1001
 
     gu = GeneralUtilities(L)
+    ss = SnowflakeSimulation(L, 200)
 
-    ice_map_test = gu.construct_minimal_ice_map()
-    ice_map_test[L-4, 0] = True 
+    ice_map_test = ss._construct_minimal_ice_map()
+    # ice_map_test[L-4, 0] = True 
 
-    sat_map_test = gu.initialize_sat_map()
+    # sat_map_test = ss._initialize_sat_map()
     boundary_map_test = gu.construct_boundary_map(ice_map_test)
 
     print(ice_map_test[-5:,:5])
-    print(sat_map_test[-5:,:5])
+    # print(sat_map_test[-5:,:5])
     print(boundary_map_test[-5:,:5])
     

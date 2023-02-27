@@ -90,7 +90,6 @@ class GeneralUtilities:
 
         # 'One time runs' for geometry-dependent utilities
         self.neighbor_array = self._construct_neighbor_array() # construct neighbor array
-        self.diffusion_rules = self._construct_default_diffusion_rules() # construct diffusion rules
 
     ### PRIVATE METHODS ###
 
@@ -183,6 +182,27 @@ class GeneralUtilities:
 
         return neighbor_array
 
+    def _distinguish_cells(self, ice_map, boundary_map):
+        X_normal = []
+        Y_normal = []
+        
+        X_boundary = []
+        Y_boundary = []
+
+        for line in range(1,self.L):
+            for col in range((self.L-line+1)//2):
+                if not ice_map[line, col]:
+                    if boundary_map[line, col] == 0:
+                        X_normal.append(line)
+                        Y_normal.append(col)
+                    else:
+                        X_boundary.append(line)
+                        Y_boundary.append(col)
+
+        normal_cells = np.transpose(np.array([X_normal, Y_normal]))
+        boundary_cells = np.transpose(np.array([X_boundary, Y_boundary]))
+        
+        return normal_cells, boundary_cells
 
     ### PUBLIC METHODS ###
 
@@ -359,7 +379,7 @@ class SaturationRelaxationUtilities:
         self.max_iter = max_iter
 
         # diffusion rules do not change and only need to be generated once
-        self.diffusion_rules = self._construct_default_diffusion_rules() 
+        self.diffusion_rules = self._construct_default_diffusion_rules()  
 
 
     ##### Private Methods #####
@@ -470,28 +490,7 @@ class SaturationRelaxationUtilities:
         return new_sat
 
 
-    def _distinguish_cells(self, ice_map, boundary_map):
-        X_normal = []
-        Y_normal = []
-        
-        X_boundary = []
-        Y_boundary = []
-
-        for line in range(1,self.L):
-            for col in range((self.L-line+1)//2):
-                if not ice_map[line, col]:
-                    if boundary_map[line, col] == 0:
-                        X_normal.append(line)
-                        Y_normal.append(col)
-                    else:
-                        X_boundary.append(line)
-                        Y_boundary.append(col)
-
-        normal_cells = np.transpose(np.array([X_normal, Y_normal]))
-        boundary_cells = np.transpose(np.array([X_boundary, Y_boundary]))
-        
-        return normal_cells, boundary_cells
-
+    # Opp utilities #
 
     def _get_opp_neighbor_indices(self, ice_map, local_neighbors):
         """ A function that returns up to the three neighbor indices corresponding 
@@ -550,47 +549,6 @@ class SaturationRelaxationUtilities:
         return sat_sum / opp_counter # returns the average of opposing saturations
 
 
-    def _execute_relaxation_step(self, old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, diffusion_rules, boundary_map):
-        """ JESUS CHRIST FIGURE THIS OUT LMAO.
-
-        """
-        new_sat_map = old_sat_map.copy() # initialize new sat map as a copy of the old sat
-
-        # get amount of vapor cells of both types
-        normal_cell_amount = np.shape(normal_cells)[0]
-        boundary_cell_amount = np.shape(boundary_cells)[0]
-
-        # diffuse all normal cells previously found
-        for i in range(normal_cell_amount):
-            line = int(normal_cells[i,0])
-            col = int(normal_cells[i,1])
-
-            local_neighbors = neighbor_array[line, col, :, :]
-            local_diffusion_rules = diffusion_rules[line, col, :]
-
-            new_sat_map[line, col] = self._diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
-
-        # application of boundary conditions to cells, I guess
-        for i in range(boundary_cell_amount):
-            line = int(boundary_cells[i,0])
-            col = int(boundary_cells[i,1])
-
-            local_neighbors = neighbor_array[line, col, :, :]
-            local_diffusion_rules = diffusion_rules[line, col, :]
-            local_opps = opp_array[i,:]
-
-            sat_opp_avg = self._calculate_sat_opp_average(old_sat_map, local_neighbors, local_opps)
-            
-            new_sat_map[line, col] = self.PU.apply_boundary_condition(
-                line, 
-                col, 
-                old_sat_map, 
-                sat_opp_avg, 
-                boundary_map
-            )
-
-        return new_sat_map
-
 
     def _has_converged(self, sat_1, sat_2, epsilon):
         """ Function that allows for an element-wise convergence assessment
@@ -620,16 +578,72 @@ class SaturationRelaxationUtilities:
         return True # returns True if all elements of the array are withing convergence
 
 
+    def _execute_relaxation_step(self, old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, boundary_map):
+        """ JESUS CHRIST FIGURE THIS OUT LMAO.
+
+        """
+        new_sat_map = old_sat_map.copy() # initialize new sat map as a copy of the old sat
+
+        # get amount of vapor cells of both types
+        normal_cell_amount = np.shape(normal_cells)[0]
+        boundary_cell_amount = np.shape(boundary_cells)[0]
+
+        # diffuse all normal cells previously found
+        for i in range(normal_cell_amount):
+            line = int(normal_cells[i,0])
+            col = int(normal_cells[i,1])
+
+            local_neighbors = neighbor_array[line, col, :, :]
+            local_diffusion_rules = self.diffusion_rules[line, col, :] # gets the local diffusion rules
+
+            new_sat_map[line, col] = self._diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
+
+        # application of boundary conditions to cells, I guess
+        for i in range(boundary_cell_amount):
+            line = int(boundary_cells[i,0])
+            col = int(boundary_cells[i,1])
+
+            local_neighbors = neighbor_array[line, col, :, :]
+            local_diffusion_rules = self.diffusion_rules[line, col, :]
+            local_opps = opp_array[i,:]
+
+            sat_opp_avg = self._calculate_sat_opp_average(old_sat_map, local_neighbors, local_opps)
+            
+            new_sat_map[line, col] = self.PU.apply_boundary_condition(
+                line, 
+                col, 
+                old_sat_map, 
+                sat_opp_avg, 
+                boundary_map
+            )
+
+        return new_sat_map
+
+
 ##### Public Methods #####
 
-    def diffuse_to_convergence(self, sat_map, max_iter, epsilon):
+
+    def diffuse_to_convergence(self, sat_map, max_iter, epsilon, normal_cells, boundary_cells, ice_map, boundary_map, neighbor_array):
         """ Repeats the relaxation steps until the desired convergence is achieved.
+        NOTE : epsilon is left as a dangly parameter because enveloppe class can adjust it.
         """
+        # initializes `old_sat` as a copy of the given `sat_map`
+        old_sat = sat_map.copy() 
 
-        old_sat = sat_map.copy() # initializes the "old sat"
+        # calculate opp array
+        opp_array = self._construct_opp_array(boundary_cells, ice_map, neighbor_array)
 
+        # tries the relaxation method for maximal amount of times
         for i in range(max_iter):
-            new_sat = self._execute_relaxation_step(old_sat)
+            # gets the new saturation map that's been relaxed one step
+            new_sat = self._execute_relaxation_step(
+                sat_map, 
+                normal_cells, 
+                boundary_cells, 
+                opp_array, 
+                neighbor_array, 
+                boundary_map
+                )
             if self._has_converged(new_sat, old_sat, epsilon):
                 return new_sat, True # returns reasonably converged saturation map and success status
 
@@ -746,6 +760,11 @@ class SnowflakeSimulation:
         # initialize default saturation map
         self.sat_map = self._initialize_sat_map()
 
+        ###################################### initialize all missing classes right here
+        # NOTE: don't forget to add types for all classes...
+        self.GU = GeneralUtilities(self.L)
+        # keep adding here
+
     ### Private methods ###
 
     def _initialize_sat_map(self):
@@ -806,15 +825,19 @@ class SnowflakeSimulation:
 
     def run_simulation(self): ################################# FILL OUT ARGUMENTS
         
+        unrelaxed_sat_map = self.sat_map.copy()
+
         for c in range(self.max_cycles):
             
-            # STEP I : Relax sat_map
+            ### STEP I : Relax sat_map ###
 
-            # STEP II : Update filling, timing and ice
+            #
 
-            # STEP III : Update boundary array *****and things like that*****
+            ### STEP II : Update filling, timing and ice ###
 
-            # STEP IV : Assess if up to spec
+            ### STEP III : Update boundary array *****and things like that***** ###
+
+            ### STEP IV : Assess if up to spec ###
             
             pass ######################################################### REMOVE
         return None ######################################################## CHANGE

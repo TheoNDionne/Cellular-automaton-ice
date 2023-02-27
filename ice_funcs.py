@@ -69,8 +69,7 @@ import numba as nb
 @nb.experimental.jitclass({
     "L" : nb.int32,
     "W" : nb.int32,
-    "neighbor_array" : nb.float32[:,:,:,::1],
-    "diffusion_rules" : nb.float32[:,:,::1]
+    "neighbor_array" : nb.float32[:,:,:,::1]
 })
 class GeneralUtilities:
     """ Class that implements utilities that are related to general bookkeeping.
@@ -184,82 +183,6 @@ class GeneralUtilities:
 
         return neighbor_array
 
-    def _construct_default_diffusion_rules(self):
-        """ Constructs the 'vanilla' diffusion rules using the discretized
-        version of the diffusion equation.
-
-        Arguments
-        ---------
-        l : int
-            Total length of the restricted simulation zone (1/12th) 
-            of total snowflake.
-        w : int
-            Total width of the restricted simulation zone. 
-
-        Return
-        ------
-        Returns the set of diffusion rules for the model (array(float, 3d)).
-        Array is indexed as Arr[i,j,k], where:
-        - i : line of the cell to diffuse.
-        - j : column of the cell to diffuse.
-        - k : coefficient by which to multiply saturation situated at 
-            neighbor index `k`.
-        """
-        # diffusion for average-cell
-        inner_rule_set = np.ones(6)/6
-        
-        #diffusion for the upper ragged cells
-        upper_ragged_rule_set = np.array([
-            1/6,
-            1/6,
-            0,
-            1/6,
-            1/6,
-            1/3
-        ])
-
-        #diffusion for the lower ragged cells
-        lower_ragged_rule_set = np.array([
-            1/3,
-            0,
-            0,
-            0,
-            1/3,
-            1/3
-        ])
-
-        # diffusion for the flush left cells
-        flush_left_rule_set = np.array([
-            1/6,
-            1/3,
-            1/3,
-            1/6,
-            0,
-            0
-        ])
-        
-        diffusion_rules = np.empty((self.L, self.W, 6), dtype=np.float32)
-
-        # fill out cells pertaining to flush left cells
-        for line in range(1, self.L-4):
-            diffusion_rules[line, 0, :] = flush_left_rule_set
-
-        # fill out all lower ragged cells
-        for col in range(2, self.W-1):
-            line = self.L - 2*col - 1
-            diffusion_rules[line, col, :] = lower_ragged_rule_set
-
-        # fill out all upper ragged cells
-        for col in range(2, self.W-1):
-            line = self.L - 2*col - 2
-            diffusion_rules[line, col, :] = upper_ragged_rule_set
-
-        # fill out the rest
-        for col in range(1, self.W-1):
-            for line in range(1, self.L - 2*col - 2):
-                diffusion_rules[line, col, :] = inner_rule_set
-
-        return diffusion_rules
 
     ### PUBLIC METHODS ###
 
@@ -418,8 +341,10 @@ PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type)
 
 @nb.experimental.jitclass({
     "L" : nb.int32,
+    "W" : nb.int32,
     "PU" : PhysicsUtilities_instance_type,
-    "max_iter" : nb.int32
+    "max_iter" : nb.int32,
+    "diffusion_rules" : nb.float32[:,:,::1]
 })
 class SaturationRelaxationUtilities:
     """FILL OUT"""
@@ -428,11 +353,95 @@ class SaturationRelaxationUtilities:
         """
         """
         self.L = L
+        self.W = (L+1)//2
 
         self.PU = PhysicsUtilities_inst
         self.max_iter = max_iter
 
+        # diffusion rules do not change and only need to be generated once
+        self.diffusion_rules = self._construct_default_diffusion_rules() 
+
+
     ##### Private Methods #####
+
+
+    def _construct_default_diffusion_rules(self):
+        """ Constructs the 'vanilla' diffusion rules using the discretized
+        version of the diffusion equation.
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone. 
+
+        Return
+        ------
+        Returns the set of diffusion rules for the model (array(float, 3d)).
+        Array is indexed as Arr[i,j,k], where:
+        - i : line of the cell to diffuse.
+        - j : column of the cell to diffuse.
+        - k : coefficient by which to multiply saturation situated at 
+            neighbor index `k`.
+        """
+        # diffusion for average-cell
+        inner_rule_set = np.ones(6)/6
+        
+        #diffusion for the upper ragged cells
+        upper_ragged_rule_set = np.array([
+            1/6,
+            1/6,
+            0,
+            1/6,
+            1/6,
+            1/3
+        ])
+
+        #diffusion for the lower ragged cells
+        lower_ragged_rule_set = np.array([
+            1/3,
+            0,
+            0,
+            0,
+            1/3,
+            1/3
+        ])
+
+        # diffusion for the flush left cells
+        flush_left_rule_set = np.array([
+            1/6,
+            1/3,
+            1/3,
+            1/6,
+            0,
+            0
+        ])
+        
+        diffusion_rules = np.empty((self.L, self.W, 6), dtype=np.float32)
+
+        # fill out cells pertaining to flush left cells
+        for line in range(1, self.L-4):
+            diffusion_rules[line, 0, :] = flush_left_rule_set
+
+        # fill out all lower ragged cells
+        for col in range(2, self.W-1):
+            line = self.L - 2*col - 1
+            diffusion_rules[line, col, :] = lower_ragged_rule_set
+
+        # fill out all upper ragged cells
+        for col in range(2, self.W-1):
+            line = self.L - 2*col - 2
+            diffusion_rules[line, col, :] = upper_ragged_rule_set
+
+        # fill out the rest
+        for col in range(1, self.W-1):
+            for line in range(1, self.L - 2*col - 2):
+                diffusion_rules[line, col, :] = inner_rule_set
+
+        return diffusion_rules
+
 
     def _diffuse_cell(self, sat_map, local_diffusion_rules, local_neighbors):
         """ Returns the value of a cell after one step of the diffusion process.

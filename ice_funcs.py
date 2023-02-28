@@ -757,7 +757,19 @@ GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) #
 ###############################################################"""
 
 
-########################################## NUMBAFY THIS ###################################
+# @nb.experimental.jitclass({
+#     "L" : nb.int32,
+#     "W" : nb.int32,
+#     "initial_sat" : nb.float64,
+#     "max_diffusion_iter" : nb.int32,
+#     "max_cycles" : nb.int32,
+#     "ice_map" : nb.boolean[:,::1],
+#     "sat_map" : nb.float64[:,::1],
+#     "GeneralU" : GeneralUtilities_instance_type,
+#     # "PhysicsU" : PhysicsUtilities_instance_type,
+#     # "RelaxationU" : SaturationRelaxationUtilities_instance_type,
+#     # "GrowthU" : GrowthUtilities_instance_type
+# })
 class SnowflakeSimulation:
 
     def __init__(self, L, max_diffusion_iter, max_cycles=100, initial_sat=1): ########################################## add all simulation parameters later
@@ -771,14 +783,14 @@ class SnowflakeSimulation:
         # initialize default ice map
         self.ice_map = self._construct_minimal_ice_map()
 
-        # initialize default saturation map
+        # # initialize default saturation map
         self.sat_map = self._initialize_sat_map()
 
         # intialization of all useful subclasses
         self.GeneralU = GeneralUtilities(self.L)
-        self.PhysicsU = PhysicsUtilities(1,1) # make it so this can be changed!
-        self.RelaxationU = SaturationRelaxationUtilities(self.L, self.max_diffusion_iter)
-        self.GrowthU = GrowthUtilities(self.L)
+        # self.PhysicsU = PhysicsUtilities(1,1) # make it so this can be changed!
+        # self.RelaxationU = SaturationRelaxationUtilities(self.L, self.max_diffusion_iter)
+        # self.GrowthU = GrowthUtilities(self.L)
 
     ### Private methods ###
 

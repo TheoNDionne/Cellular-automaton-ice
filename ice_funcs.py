@@ -246,8 +246,8 @@ class GeneralUtilities:
 
 
 # Define type of GeneralUtilities class instance
-# GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
-# GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
+GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
+GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
 
 
 """###############################################################
@@ -346,8 +346,8 @@ class PhysicsUtilities:
 
 
 # # Define type of PhysicsUtilities class instance
-# PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
-# PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
+PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
+PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
 
 
 """###############################################################
@@ -538,34 +538,6 @@ class SaturationRelaxationUtilities:
         return sat_sum / opp_counter # returns the average of opposing saturations
 
 
-    def _has_converged_old(self, sat_1, sat_2, epsilon):
-        """ Function that allows for an element-wise convergence assessment
-        of two arrays of the form |a-b| < epsilon.
-
-        Arguments
-        ---------
-        sat_1 : array(float, 2d)
-            The first array to be compared.
-        sat_2 : array(float, 2d)
-            The second array to be compared.
-        epsilon : float
-            The maximum allowed difference in the convergence criterion.
-
-        Return
-        ------
-        The truth status of the convergence: `True` if all element-wise 
-        differences are smaller than epsilon, `False` or else. (bool)
-        """
-        array_shape = np.shape(sat_1)
-
-        for i in range(array_shape[0]):
-            for j in range(array_shape[1]):
-                if abs(sat_1[i,j] - sat_2[i,j]) > epsilon:
-                    return False # returns False if any elements of the array are out of convergence
-
-        return True # returns True if all elements of the array are withing convergence
-    
-
     def _has_converged(self, sat_1, sat_2, epsilon):
         """ Function that allows for an element-wise convergence assessment
         of two arrays of the form |a-b| < epsilon. Only performs operation 
@@ -675,8 +647,8 @@ class SaturationRelaxationUtilities:
 
 ############################################################################# ADD BACK WHEN DONE
 # # Define type of SaturationRelaxationUtilities class instance
-# SaturationRelaxationUtilities_instance_type = nb.deferred_type() # initialize SaturationRelaxationUtilities instance type
-# SaturationRelaxationUtilities_instance_type.define(SaturationRelaxationUtilities.class_type.instance_type) # define SaturationRelaxationUtilities' type as it's own type
+SaturationRelaxationUtilities_instance_type = nb.deferred_type() # initialize SaturationRelaxationUtilities instance type
+SaturationRelaxationUtilities_instance_type.define(SaturationRelaxationUtilities.class_type.instance_type) # define SaturationRelaxationUtilities' type as it's own type
 
 
 """###############################################################
@@ -687,22 +659,18 @@ class SaturationRelaxationUtilities:
 """
 #### DO THING THAT INITIALIZES THE FILLING ARRAY AND THE TIME ARRAY
 """
-# @nb.experimental.jitclass({
-#     "L" : nb.int32,
-#     "W" : nb.int32,
-#     "PhysicsUtilities_instance" : PhysicsUtilities_instance_type,
-#     "filling_array" : nb.float32[:,::1],
-#     "timing_array" : nb.float32[:,::1],
-#     "minimum_time_increment" : nb.float32
-# })
+@nb.experimental.jitclass({
+    "L" : nb.int32,
+    "W" : nb.int32,
+    "filling_array" : nb.float32[:,::1],
+    "minimum_time_increment" : nb.float32
+})
 class GrowthUtilities:
     ############################ FILL OUT COMMENTS #############################
-    def __init__(self, L, PhysicsUtilities_instance):
+    def __init__(self, L):
         self.L = L
         self.W = (L+1)//2
-        self.PU = PhysicsUtilities_instance # PU
-        self.filling_array = np.full((self.L, self.W), 0.0, dtype=nb.float32)
-        self.timing_array = np.full((self.L, self.W), 0.0, dtype=nb.float32)
+        self.filling_array = np.full((self.L, self.W), 0.0, dtype=nb.float32) # initialize filling array
 
         self.minimum_time_increment = 0.0 # initialize minimum time increment
 
@@ -737,9 +705,8 @@ class GrowthUtilities:
 
     #     return None
 
-    def get_minimum_time(self, boundary_cells, sat_map, boundary_map):
-        """
-        ################# ONLY KEEP THE MINIMUM TIME INCREMENT!!
+    def update_minimum_time(self, boundary_cells, sat_map, boundary_map, PU):
+        """Calculates the minimum time increment in the active boundary cells
         """
 
         boundary_cell_amount = np.shape(boundary_cells)[0]
@@ -750,21 +717,19 @@ class GrowthUtilities:
             col = boundary_cells[i,1]
 
             # calculate growth time increment
-            growth_time_increment = self.PU.calculate_growth_time_increment(
+            growth_time_increment = PU.calculate_growth_time_increment(
                 sat_map[line,col], 
                 boundary_map[line,col], 
                 self.filling_array[line,col]
             )
             time_increments[i] = growth_time_increment # add growth time increment to a temp array
 
-            self.timing_array[line, col] += growth_time_increment  # add time increment to timing array
-
         # get minimum time increment and update minimum_time_increment attribute
         self.minimum_time_increment = np.min(time_increments) 
 
         return None
 
-    def update_filling_array(self, boundary_cells, sat_map, boundary_map):
+    def update_filling_array(self, boundary_cells, sat_map, boundary_map, PU):
         """
         
         """
@@ -773,7 +738,7 @@ class GrowthUtilities:
             line = coords[0] # boundary cell line
             col = coords[1] # boundary cell col
 
-            self.filling_array[line, col] += self.PU.calculate_filling_factor_increment(
+            self.filling_array[line, col] += PU.calculate_filling_factor_increment(
                 sat_map[line,col], 
                 boundary_map[line, col], 
                 self.minimum_time_increment
@@ -783,8 +748,8 @@ class GrowthUtilities:
 
 ############################################################################# ADD BACK WHEN DONE
 # # Define type of GrowthUtilities class instance
-# GrowthUtilities_instance_type = nb.deferred_type() # initialize GrowthUtilities instance type
-# GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) # define GrowthUtilities' type as it's own type
+GrowthUtilities_instance_type = nb.deferred_type() # initialize GrowthUtilities instance type
+GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) # define GrowthUtilities' type as it's own type
     
 
 """###############################################################

@@ -182,7 +182,11 @@ class GeneralUtilities:
 
         return neighbor_array
 
-    def _distinguish_cells(self, ice_map, boundary_map):
+    
+
+    ### PUBLIC METHODS ###
+
+    def distinguish_cells(self, ice_map, boundary_map):
         X_normal = []
         Y_normal = []
         
@@ -203,8 +207,6 @@ class GeneralUtilities:
         boundary_cells = np.transpose(np.array([X_boundary, Y_boundary]))
         
         return normal_cells, boundary_cells
-
-    ### PUBLIC METHODS ###
 
     def construct_boundary_map(self, ice_map): 
         """ Function that constructs a map of all boudary pixels. The number 
@@ -610,7 +612,7 @@ class SaturationRelaxationUtilities:
 ##### Public Methods #####
 
 
-    def diffuse_to_convergence(self, sat_map, max_iter, epsilon, normal_cells, boundary_cells, ice_map, boundary_map, neighbor_array, PU):
+    def diffuse_to_convergence(self, sat_map, epsilon, normal_cells, boundary_cells, ice_map, boundary_map, neighbor_array, PU):
         """ Repeats the relaxation steps until the desired convergence is achieved.
         NOTE : epsilon is left as a dangly parameter because enveloppe class can adjust it.
         """
@@ -623,7 +625,7 @@ class SaturationRelaxationUtilities:
         i = 0
 
         # tries the relaxation method for maximal amount of times
-        while i < max_iter:
+        while i < self.max_iter:
             i += 1 # increment loop counter
 
             # gets the new saturation map that's been relaxed one step
@@ -788,9 +790,9 @@ class SnowflakeSimulation:
 
         # intialization of all useful subclasses
         self.GeneralU = GeneralUtilities(self.L)
-        # self.PhysicsU = PhysicsUtilities(1,1) # make it so this can be changed!
-        # self.RelaxationU = SaturationRelaxationUtilities(self.L, self.max_diffusion_iter)
-        # self.GrowthU = GrowthUtilities(self.L)
+        self.PhysicsU = PhysicsUtilities(1,1) # make it so this can be changed!
+        self.RelaxationU = SaturationRelaxationUtilities(self.L, self.max_diffusion_iter)
+        self.GrowthU = GrowthUtilities(self.L)
 
     ### Private methods ###
 
@@ -848,23 +850,47 @@ class SnowflakeSimulation:
     ### Public methods ###
 
 
-    def run_simulation(self): ################################# FILL OUT ARGUMENTS
+    def run_simulation(self, epsilon): ################################# FILL OUT ARGUMENTS maybe move some
         
-        unrelaxed_sat_map = self.sat_map.copy()
+        ### STEP 0 : Initialize values ###
+
+        boundary_map = self.GeneralU.construct_boundary_map(self.ice_map)
+
+        normal_cells, boundary_cells = self.GeneralU.distinguish_cells(self.ice_map, boundary_map)
+
+        neighbor_array = self.GeneralU.neighbor_array
 
 
         for c in range(self.max_cycles):
-            
+
             ### STEP I : Relax sat_map ###
 
-            #
+            # relaxes the sat map
+            self.sat_map = self.RelaxationU.diffuse_to_convergence(
+                self.sat_map, 
+                epsilon, 
+                normal_cells, 
+                boundary_cells, 
+                self.ice_map,
+                boundary_map,
+                neighbor_array,
+                self.PhysicsU
+            )[0] ################################ Flexible utility in the future
 
             ### STEP II : Update filling, timing and ice ###
 
+            self.GrowthU.update_minimum_time(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
+            self.GrowthU.update_filling_array(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
+            ################################ Update ice array if needed ############################
+
             ### STEP III : Update boundary array *****and things like that***** ###
+
+            ###################### Update boundary array if needed *** and things like that ***
 
             ### STEP IV : Assess if up to spec ###
             
+            ###################### Determine a good break condition
+
             pass ######################################################### REMOVE
         return None ######################################################## CHANGE
 

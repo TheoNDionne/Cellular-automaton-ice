@@ -246,8 +246,8 @@ class GeneralUtilities:
 
 
 # Define type of GeneralUtilities class instance
-GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
-GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
+# GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
+# GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
 
 
 """###############################################################
@@ -346,8 +346,8 @@ class PhysicsUtilities:
 
 
 # # Define type of PhysicsUtilities class instance
-PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
-PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
+# PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
+# PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
 
 
 """###############################################################
@@ -538,7 +538,7 @@ class SaturationRelaxationUtilities:
         return sat_sum / opp_counter # returns the average of opposing saturations
 
 
-    def _has_converged(self, sat_1, sat_2, epsilon):
+    def _has_converged_old(self, sat_1, sat_2, epsilon):
         """ Function that allows for an element-wise convergence assessment
         of two arrays of the form |a-b| < epsilon.
 
@@ -561,6 +561,33 @@ class SaturationRelaxationUtilities:
         for i in range(array_shape[0]):
             for j in range(array_shape[1]):
                 if abs(sat_1[i,j] - sat_2[i,j]) > epsilon:
+                    return False # returns False if any elements of the array are out of convergence
+
+        return True # returns True if all elements of the array are withing convergence
+    
+
+    def _has_converged(self, sat_1, sat_2, epsilon):
+        """ Function that allows for an element-wise convergence assessment
+        of two arrays of the form |a-b| < epsilon. Only performs operation 
+        over relevant physical sites.
+
+        Arguments
+        ---------
+        sat_1 : array(float, 2d)
+            The first array to be compared.
+        sat_2 : array(float, 2d)
+            The second array to be compared.
+        epsilon : float
+            The maximum allowed difference in the convergence criterion.
+
+        Return
+        ------
+        The truth status of the convergence: `True` if all element-wise 
+        differences are smaller than epsilon, `False` or else. (bool)
+        """
+        for line in range(1,self.L):
+            for col in range((self.L-line+1)//2):
+                if abs(sat_1[line,col] - sat_2[line,col]) > epsilon:
                     return False # returns False if any elements of the array are out of convergence
 
         return True # returns True if all elements of the array are withing convergence
@@ -683,9 +710,36 @@ class GrowthUtilities:
 
     ### PUBLIC METHODS ###
 
-    def update_timing_array(self, boundary_cells, sat_map, boundary_map):
+    # def update_timing_array(self, boundary_cells, sat_map, boundary_map):
+    #     """
+    #     ################# ONLY KEEP THE MINIMUM TIME INCREMENT!!
+    #     """
+
+    #     boundary_cell_amount = np.shape(boundary_cells)[0]
+    #     time_increments = np.empty(boundary_cell_amount)
+
+    #     for i in range(boundary_cell_amount):
+    #         line = boundary_cells[i,0]
+    #         col = boundary_cells[i,1]
+
+    #         # calculate growth time increment
+    #         growth_time_increment = self.PU.calculate_growth_time_increment(
+    #             sat_map[line,col], 
+    #             boundary_map[line,col], 
+    #             self.filling_array[line,col]
+    #         )
+    #         time_increments[i] = growth_time_increment # add growth time increment to a temp array
+
+    #         self.timing_array[line, col] += growth_time_increment  # add time increment to timing array
+
+    #     # get minimum time increment and update minimum_time_increment attribute
+    #     self.minimum_time_increment = np.min(time_increments) 
+
+    #     return None
+
+    def get_minimum_time(self, boundary_cells, sat_map, boundary_map):
         """
-        
+        ################# ONLY KEEP THE MINIMUM TIME INCREMENT!!
         """
 
         boundary_cell_amount = np.shape(boundary_cells)[0]

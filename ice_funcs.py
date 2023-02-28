@@ -774,10 +774,11 @@ class SnowflakeSimulation:
         # initialize default saturation map
         self.sat_map = self._initialize_sat_map()
 
-        ###################################### initialize all missing classes right here
-        # NOTE: don't forget to add types for all classes...
-        self.GU = GeneralUtilities(self.L)
-        # keep adding here
+        # intialization of all useful subclasses
+        self.GeneralU = GeneralUtilities(self.L)
+        self.PhysicsU = PhysicsUtilities(1,1) # make it so this can be changed!
+        self.RelaxationU = SaturationRelaxationUtilities(self.L, self.max_diffusion_iter)
+        self.GrowthU = GrowthUtilities(self.L)
 
     ### Private methods ###
 
@@ -831,15 +832,14 @@ class SnowflakeSimulation:
 
         return ice_map
 
+
     ### Public methods ###
-
-    
-
 
 
     def run_simulation(self): ################################# FILL OUT ARGUMENTS
         
         unrelaxed_sat_map = self.sat_map.copy()
+
 
         for c in range(self.max_cycles):
             

@@ -69,7 +69,9 @@ import numba as nb
 @nb.experimental.jitclass({
     "L" : nb.int32,
     "W" : nb.int32,
-    "neighbor_array" : nb.float32[:,:,:,::1]
+    "neighbor_array" : nb.float32[:,:,:,::1],
+    "ice_map" : nb.boolean[:,::1],
+    "sat_map" : nb.float64[:,::1]
 })
 class GeneralUtilities:
     """ Class that implements utilities that are related to general bookkeeping.
@@ -91,7 +93,63 @@ class GeneralUtilities:
         # 'One time runs' for geometry-dependent utilities
         self.neighbor_array = self._construct_neighbor_array() # construct neighbor array
 
+        # initialize default ice map
+        self.ice_map = self._construct_minimal_ice_map()
+
+        # # initialize default saturation map
+        self.sat_map = self._initialize_sat_map()
+
     ### PRIVATE METHODS ###
+
+    def _initialize_sat_map(self):
+        """ Function that initializes the saturation map at a 
+        constant value `initial_sat`.
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone.
+
+        Return
+        ------
+        The initialized saturation map. (array(float, 2d))
+        """ 
+
+        return np.full((self.L, self.W), self.initial_sat, dtype=np.float64)
+
+    def _construct_minimal_ice_map(self):
+        """ Function that constructs the minimal ice map defined 
+        in the model (4 cells).
+
+        Arguments
+        ---------
+        l : int
+            Total length of the restricted simulation zone (1/12th) 
+            of total snowflake.
+        w : int
+            Total width of the restricted simulation zone.
+        
+        Return
+        ------
+        The minimal possible ice map. (array(bool, 2d))
+        """
+        ice_map = np.full((self.L, self.W), False) # initialize 'empty' ice_map
+
+        # minimum amount of initial ice that doesn't brick the model
+        minimal_ice_coords = np.array([
+            [self.L-1,0],
+            [self.L-2,0],
+            [self.L-3,0],
+            [self.L-3,1]
+        ])
+
+        for coords in minimal_ice_coords:
+            ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
+
+        return ice_map
 
     def _is_legit_cell(self, line, col):
         """ Function that verified that provided coordinates are 
@@ -782,12 +840,6 @@ class SnowflakeSimulation:
         self.max_diffusion_iter = max_diffusion_iter
         self.max_cycles = max_cycles
 
-        # initialize default ice map
-        self.ice_map = self._construct_minimal_ice_map()
-
-        # # initialize default saturation map
-        self.sat_map = self._initialize_sat_map()
-
         # intialization of all useful subclasses
         self.GeneralU = GeneralUtilities(self.L)
         self.PhysicsU = PhysicsUtilities(1,1) # make it so this can be changed!
@@ -796,55 +848,6 @@ class SnowflakeSimulation:
 
     ### Private methods ###
 
-    def _initialize_sat_map(self):
-        """ Function that initializes the saturation map at a 
-        constant value `initial_sat`.
-
-        Arguments
-        ---------
-        l : int
-            Total length of the restricted simulation zone (1/12th) 
-            of total snowflake.
-        w : int
-            Total width of the restricted simulation zone.
-
-        Return
-        ------
-        The initialized saturation map. (array(float, 2d))
-        """ 
-
-        return np.full((self.L, self.W), self.initial_sat, dtype=np.float64)
-
-    def _construct_minimal_ice_map(self):
-        """ Function that constructs the minimal ice map defined 
-        in the model (4 cells).
-
-        Arguments
-        ---------
-        l : int
-            Total length of the restricted simulation zone (1/12th) 
-            of total snowflake.
-        w : int
-            Total width of the restricted simulation zone.
-        
-        Return
-        ------
-        The minimal possible ice map. (array(bool, 2d))
-        """
-        ice_map = np.full((self.L, self.W), False) # initialize 'empty' ice_map
-
-        # minimum amount of initial ice that doesn't brick the model
-        minimal_ice_coords = np.array([
-            [self.L-1,0],
-            [self.L-2,0],
-            [self.L-3,0],
-            [self.L-3,1]
-        ])
-
-        for coords in minimal_ice_coords:
-            ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
-
-        return ice_map
 
 
     ### Public methods ###
@@ -882,6 +885,8 @@ class SnowflakeSimulation:
             self.GrowthU.update_minimum_time(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
             self.GrowthU.update_filling_array(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
             ################################ Update ice array if needed ############################
+            # new_ice_map = 
+
 
             ### STEP III : Update boundary array *****and things like that***** ###
 

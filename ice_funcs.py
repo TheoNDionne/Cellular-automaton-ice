@@ -707,6 +707,7 @@ class GrowthUtilities:
 
     #     return None
 
+
     def update_minimum_time(self, boundary_cells, sat_map, boundary_map, PU):
         """Calculates the minimum time increment in the active boundary cells
         """
@@ -731,6 +732,7 @@ class GrowthUtilities:
 
         return None
 
+
     def update_filling_array(self, boundary_cells, sat_map, boundary_map, PU):
         """
         
@@ -748,10 +750,30 @@ class GrowthUtilities:
 
         return None 
 
+
+    def get_cells_to_progress_from_filling_array(self):
+        """Get cells that have a filling index > 1 and then set them to np.nan
+        """
+        
+        filled_cell_lines = []
+        filled_cell_cols = []
+
+        for line in range(1,self.L):
+            for col in range((self.L-line+1)//2):
+                if self.filling_array[line,col] >= 1:
+                    # collect filled cell coordinates
+                    filled_cell_lines.append(line)
+                    filled_cell_cols.append(col)
+
+                    # set filled cells to np.nan to avoid recounting
+                    self.filling_array[line,col] = np.nan
+
+        return np.transpose(np.array([filled_cell_lines, filled_cell_cols]))
+
 ############################################################################# ADD BACK WHEN DONE
 # # Define type of GrowthUtilities class instance
-GrowthUtilities_instance_type = nb.deferred_type() # initialize GrowthUtilities instance type
-GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) # define GrowthUtilities' type as it's own type
+# GrowthUtilities_instance_type = nb.deferred_type() # initialize GrowthUtilities instance type
+# GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) # define GrowthUtilities' type as it's own type
     
 
 """###############################################################
@@ -759,25 +781,14 @@ GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) #
 ###############################################################"""
 
 
-# @nb.experimental.jitclass({
-#     "L" : nb.int32,
-#     "W" : nb.int32,
-#     "initial_sat" : nb.float64,
-#     "max_diffusion_iter" : nb.int32,
-#     "max_cycles" : nb.int32,
-#     "ice_map" : nb.boolean[:,::1],
-#     "sat_map" : nb.float64[:,::1],
-#     "GeneralU" : GeneralUtilities_instance_type,
-#     # "PhysicsU" : PhysicsUtilities_instance_type,
-#     # "RelaxationU" : SaturationRelaxationUtilities_instance_type,
-#     # "GrowthU" : GrowthUtilities_instance_type
-# })
 class SnowflakeSimulation:
 
     def __init__(self, L, max_diffusion_iter, max_cycles=100, initial_sat=1): ########################################## add all simulation parameters later
         self.L = L
         self.W = (L+1)//2
         self.initial_sat = initial_sat
+
+        self.global_time = 0.0
 
         self.max_diffusion_iter = max_diffusion_iter
         self.max_cycles = max_cycles
@@ -880,10 +891,14 @@ class SnowflakeSimulation:
             ### STEP II : Update filling, timing and ice ###
 
             self.GrowthU.update_minimum_time(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
+            # update global time
+            self.global_time += self.GrowthU.minimum_time_increment
+
             self.GrowthU.update_filling_array(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
-            ################################ Update ice array if needed ############################
+            #!!!!!!!!!!!!!!!!!!!! Update ice array if needed
             # new_ice_map = 
             
+        
 
             ### STEP III : Update boundary array *****and things like that***** ###
 

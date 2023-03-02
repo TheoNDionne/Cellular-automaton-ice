@@ -182,7 +182,27 @@ class GeneralUtilities:
 
         return neighbor_array
 
-    
+    def _get_opp_neighbor_indices(self, ice_map, local_neighbors):
+        """ A function that returns up to the three neighbor indices corresponding 
+        to the three possible neighbor cells.
+        """
+        opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
+        local_opp_array = np.full(3, np.nan, dtype=np.float32)
+
+        opps_detected = 0
+        for i in range(np.shape(local_neighbors)[0]):
+            neighbor_line = local_neighbors[i,0]
+            neighbor_col = local_neighbors[i,1]
+
+            opp_line = local_neighbors[opposing_indices[i],0]
+            opp_col = local_neighbors[opposing_indices[i],1]
+
+            if not np.isnan(neighbor_line) and not np.isnan(opp_line):
+                if ice_map[int(neighbor_line), int(neighbor_col)] == True and ice_map[int(opp_line), int(opp_col)] == False:
+                    local_opp_array[opps_detected] = opposing_indices[i] # adds opposing 'neighbor index'
+                    opps_detected += 1
+
+        return local_opp_array
 
     ### PUBLIC METHODS ###
 
@@ -245,7 +265,22 @@ class GeneralUtilities:
                 boundary_map[line, col] = neighbor_counter
 
         return boundary_map
+    
+    def construct_opp_array(self, boundary_cells, ice_map, neighbor_array):
+        """ Constructs an array that contains the coordinates of 'opposing cells'
+        """
+        array_length = np.shape(boundary_cells)[0]
+        opp_array = np.empty((array_length, 3)) 
+        
+        for i in range(array_length):
+            line = int(boundary_cells[i,0])
+            col = int(boundary_cells[i,1])
+            local_neighbors = neighbor_array[line, col, :, :]
 
+            opp_array[i,:] = self._get_opp_neighbor_indices(ice_map, local_neighbors)
+
+        return opp_array
+                
 
 # Define type of GeneralUtilities class instance
 GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
@@ -264,17 +299,19 @@ GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type)
     "max_alpha" : nb.float32,
     "X_0" : nb.float32,
     "G" : nb.float32,
-    "H" : nb.float32
+    "H" : nb.float32,
+    "safety_margin" : nb.float32
 })
 class PhysicsUtilities:
 
-    def __init__(self, D_x, v_kin, max_alpha=1, X_0=1, G=1, H=1):
+    def __init__(self, D_x, v_kin, max_alpha=1, X_0=1, G=1, H=1, safety_margin=1e-7):
         self.D_x = D_x
         self.v_kin = v_kin
         self.max_alpha = max_alpha
         self.X_0 = X_0
         self.G = G
         self.H = H
+        self.safety_margin = safety_margin
 
 
     def calculate_attachment_coefficient_with_kink(self, sat, kink):
@@ -283,7 +320,7 @@ class PhysicsUtilities:
         Loosely based off of [arXiv:1910.06389].
         
         """
-        return self.max_alpha*np.exp(-1/(kink*sat))    
+        return self.max_alpha*np.exp(-1/(kink*sat+self.safety_margin))    
 
 
     def calculate_local_growth_velocity(self, sat, kink):
@@ -344,12 +381,12 @@ class PhysicsUtilities:
         v_growth = self.calculate_local_growth_velocity(sat, kink)
         
         # inspired by K.G. Libbrecht
-        return self.H*self.D_x*(1 - filling_factor)/v_growth 
+        return self.H*self.D_x*(1 - filling_factor)/(v_growth+self.safety_margin) 
 
 
 # # Define type of PhysicsUtilities class instance
-PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
-PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
+# PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
+# PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
 
 
 """###############################################################
@@ -375,8 +412,6 @@ class SaturationRelaxationUtilities:
         self.max_iter = max_iter
 
         self.diffusion_rules = self._construct_default_diffusion_rules()
-
-        # self.PU = PhysicsUtilities_inst
 
 
     ##### Private Methods #####
@@ -482,45 +517,6 @@ class SaturationRelaxationUtilities:
     # Opp utilities #
 
 
-    def _get_opp_neighbor_indices(self, ice_map, local_neighbors):
-        """ A function that returns up to the three neighbor indices corresponding 
-        to the three possible neighbor cells.
-        """
-        opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
-        local_opp_array = np.full(3, np.nan)
-
-        opps_detected = 0
-        for i in range(np.shape(local_neighbors)[0]):
-            neighbor_line = local_neighbors[i,0]
-            neighbor_col = local_neighbors[i,1]
-
-            opp_line = local_neighbors[opposing_indices[i],0]
-            opp_col = local_neighbors[opposing_indices[i],1]
-
-            if not np.isnan(neighbor_line) and not np.isnan(opp_line):
-                if ice_map[int(neighbor_line), int(neighbor_col)] == True and ice_map[int(opp_line), int(opp_col)] == False:
-                    local_opp_array[opps_detected] = opposing_indices[i] # adds opposing 'neighbor index'
-                    opps_detected += 1
-
-        return local_opp_array
-
-    
-    def _construct_opp_array(self, boundary_cells, ice_map, neighbor_array):
-        """ Constructs an array that contains the coordinates of 'opposing cells'
-        """
-        array_length = np.shape(boundary_cells)[0]
-        opp_array = np.empty((array_length, 3)) 
-        
-        for i in range(array_length):
-            line = int(boundary_cells[i,0])
-            col = int(boundary_cells[i,1])
-            local_neighbors = neighbor_array[line, col, :, :]
-
-            opp_array[i,:] = self._get_opp_neighbor_indices(ice_map, local_neighbors)
-
-        return opp_array
-
-
     def _calculate_sat_opp_average(self, sat_map, local_neighbors, local_opps): ################################### WHISHY WASHY FUNCTION CALL ###########
         """ Calculates the average saturation of opposing cells located at the 
         
@@ -537,7 +533,10 @@ class SaturationRelaxationUtilities:
 
                 sat_sum += sat_map[int(opp_line), int(opp_col)]
 
-        return sat_sum / opp_counter # returns the average of opposing saturations
+        if opp_counter == 0:
+            return 0
+        else:
+            return sat_sum / opp_counter # returns the average of opposing saturations
 
 
     def _has_converged(self, sat_1, sat_2, epsilon):
@@ -567,7 +566,7 @@ class SaturationRelaxationUtilities:
         return True # returns True if all elements of the array are withing convergence
 
 
-    def _execute_relaxation_step(self, old_sat_map, normal_cells, boundary_cells, opp_array, neighbor_array, boundary_map, PU):
+    def _execute_relaxation_step(self, old_sat_map, normal_cells, boundary_cells, neighbor_array, boundary_map, opp_array, PU):
         """ JESUS CHRIST FIGURE THIS OUT LMAO.
 
         """
@@ -612,15 +611,12 @@ class SaturationRelaxationUtilities:
 ##### Public Methods #####
 
 
-    def diffuse_to_convergence(self, sat_map, epsilon, normal_cells, boundary_cells, ice_map, boundary_map, neighbor_array, PU):
+    def diffuse_to_convergence(self, sat_map, epsilon, normal_cells, boundary_cells, boundary_map, neighbor_array, opp_array, PU):
         """ Repeats the relaxation steps until the desired convergence is achieved.
         NOTE : epsilon is left as a dangly parameter because enveloppe class can adjust it.
         """
         # initializes `old_sat` as a copy of the given `sat_map`
         old_sat = sat_map.copy() 
-
-        # calculate opp array
-        opp_array = self._construct_opp_array(boundary_cells, ice_map, neighbor_array)
 
         i = 0
 
@@ -632,10 +628,10 @@ class SaturationRelaxationUtilities:
             new_sat = self._execute_relaxation_step(
                 old_sat, 
                 normal_cells, 
-                boundary_cells, 
-                opp_array, 
+                boundary_cells,
                 neighbor_array, 
                 boundary_map,
+                opp_array,
                 PU
                 )
             if self._has_converged(new_sat, old_sat, epsilon):
@@ -649,8 +645,8 @@ class SaturationRelaxationUtilities:
 
 ############################################################################# ADD BACK WHEN DONE
 # # Define type of SaturationRelaxationUtilities class instance
-SaturationRelaxationUtilities_instance_type = nb.deferred_type() # initialize SaturationRelaxationUtilities instance type
-SaturationRelaxationUtilities_instance_type.define(SaturationRelaxationUtilities.class_type.instance_type) # define SaturationRelaxationUtilities' type as it's own type
+# SaturationRelaxationUtilities_instance_type = nb.deferred_type() # initialize SaturationRelaxationUtilities instance type
+# SaturationRelaxationUtilities_instance_type.define(SaturationRelaxationUtilities.class_type.instance_type) # define SaturationRelaxationUtilities' type as it's own type
 
 
 """###############################################################
@@ -672,7 +668,7 @@ class GrowthUtilities:
     def __init__(self, L):
         self.L = L
         self.W = (L+1)//2
-        self.filling_array = np.full((self.L, self.W), 0.0, dtype=nb.float32) # initialize filling array
+        self.filling_array = np.full((self.L, self.W), 0.0, dtype=np.float32) # initialize filling array
 
         self.minimum_time_increment = 0.0 # initialize minimum time increment
 
@@ -751,24 +747,45 @@ class GrowthUtilities:
         return None 
 
 
-    def get_cells_to_progress_from_filling_array(self):
-        """Get cells that have a filling index > 1 and then set them to np.nan
-        """
+    # def get_cells_to_progress_from_filling_array(self):
+    #     """Get cells that have a filling index > 1 and then set them to np.nan
+    #     """
         
-        filled_cell_lines = []
-        filled_cell_cols = []
+    #     filled_cell_lines = []
+    #     filled_cell_cols = []
+
+    #     for line in range(1,self.L):
+    #         for col in range((self.L-line+1)//2):
+    #             if self.filling_array[line,col] >= 1:
+    #                 # collect filled cell coordinates
+    #                 filled_cell_lines.append(line)
+    #                 filled_cell_cols.append(col)
+
+    #                 # set filled cells to np.nan to avoid recounting
+    #                 self.filling_array[line,col] = np.nan
+
+    #     return np.transpose(np.array([filled_cell_lines, filled_cell_cols]))
+
+
+    def ammend_ice_map_from_filling(self, ice_map):
+        """
+        """
+        # default value of the progression status
+        ice_map_progressed = False
 
         for line in range(1,self.L):
             for col in range((self.L-line+1)//2):
                 if self.filling_array[line,col] >= 1:
-                    # collect filled cell coordinates
-                    filled_cell_lines.append(line)
-                    filled_cell_cols.append(col)
+                    # update progression status to `True`
+                    ice_map_progressed = True
+
+                    # fill in appropriate cells in ice map
+                    ice_map[line,col] = True
 
                     # set filled cells to np.nan to avoid recounting
                     self.filling_array[line,col] = np.nan
 
-        return np.transpose(np.array([filled_cell_lines, filled_cell_cols]))
+        return ice_map, ice_map_progressed
 
 ############################################################################# ADD BACK WHEN DONE
 # # Define type of GrowthUtilities class instance
@@ -861,55 +878,58 @@ class SnowflakeSimulation:
     ### Public methods ###
 
 
-    def run_simulation(self, epsilon): ################################# FILL OUT ARGUMENTS maybe move some
+    def run_simulation(self, max_cycles, epsilon): ################################# FILL OUT ARGUMENTS maybe move some
         
-        ### STEP 0 : Initialize values ###
+        """ STEP 0 : Initialize values """
 
-        boundary_map = self.GeneralU.construct_boundary_map(self.ice_map)
-
-        normal_cells, boundary_cells = self.GeneralU.distinguish_cells(self.ice_map, boundary_map)
-
+        # Fetch the neighbor array
         neighbor_array = self.GeneralU.neighbor_array
 
+        # Initializing quantities that must be generated every time ice map changes
+        boundary_map = self.GeneralU.construct_boundary_map(self.ice_map)
+        normal_cells, boundary_cells = self.GeneralU.distinguish_cells(self.ice_map, boundary_map)
+        opp_array = self.GeneralU.construct_opp_array(boundary_cells, self.ice_map, neighbor_array)
 
-        for c in range(self.max_cycles):
+        for c in range(max_cycles):
 
-            ### STEP I : Relax sat_map ###
+            """ STEP I : Relax sat_map """
 
             # relaxes the sat map
             self.sat_map = self.RelaxationU.diffuse_to_convergence(
                 self.sat_map, 
                 epsilon, 
                 normal_cells, 
-                boundary_cells, 
-                self.ice_map,
+                boundary_cells,
                 boundary_map,
                 neighbor_array,
+                opp_array,
                 self.PhysicsU
-            )[0] ################################ Flexible utility in the future
+            )[0]
 
-            ### STEP II : Update filling, timing and ice ###
-
+            """ STEP II : Update filling, timing and ice """
+            # Update minimal time and then increment global time
             self.GrowthU.update_minimum_time(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
-            # update global time
             self.global_time += self.GrowthU.minimum_time_increment
 
             self.GrowthU.update_filling_array(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
-            #!!!!!!!!!!!!!!!!!!!! Update ice array if needed
-            # new_ice_map = 
+            self.ice_map, ice_map_progressed = self.GrowthU.ammend_ice_map_from_filling(self.ice_map)
             
         
+            """ STEP III : Update boundary array *****and things like that***** """
 
-            ### STEP III : Update boundary array *****and things like that***** ###
+            if ice_map_progressed:
 
-            ###################### Update boundary array if needed *** and things like that ***
+                # reconstructing ice_map dependant quantities
+                boundary_map = self.GeneralU.construct_boundary_map(self.ice_map)
+                normal_cells, boundary_cells = self.GeneralU.distinguish_cells(self.ice_map, boundary_map)
+                opp_array = self.GeneralU.construct_opp_array(boundary_cells, self.ice_map, neighbor_array)
 
-            ### STEP IV : Assess if up to spec ###
+            """ STEP IV : Assess if up to spec """
             
-            ###################### Determine a good break condition
+            ################################# Determine a good break condition
 
-            pass ######################################################### REMOVE
-        return None ######################################################## CHANGE
+            
+        return self.ice_map
 
 
 if __name__ == "__main__":

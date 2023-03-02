@@ -891,6 +891,9 @@ class SnowflakeSimulation:
         opp_array = self.GeneralU.construct_opp_array(boundary_cells, self.ice_map, neighbor_array)
 
         for c in range(max_cycles):
+            if c%100 == 0:
+                print(f"Iteration {c}")
+
 
             """ STEP I : Relax sat_map """
 

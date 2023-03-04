@@ -297,6 +297,7 @@ GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type)
     "D_x" : nb.float32,
     "v_kin" : nb.float32,
     "max_alpha" : nb.float32,
+    "b" : nb.float32,
     "X_0" : nb.float32,
     "G" : nb.float32,
     "H" : nb.float32,
@@ -304,10 +305,13 @@ GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type)
 })
 class PhysicsUtilities:
 
-    def __init__(self, D_x, v_kin, max_alpha=1, X_0=1, G=1, H=1, safety_margin=1e-7):
+    def __init__(self, D_x, v_kin, b=1, max_alpha=1, X_0=1, G=1, H=1, safety_margin=1e-7):
         self.D_x = D_x
         self.v_kin = v_kin
+
         self.max_alpha = max_alpha
+        self.b = b
+        
         self.X_0 = X_0
         self.G = G
         self.H = H
@@ -320,7 +324,7 @@ class PhysicsUtilities:
         Loosely based off of [arXiv:1910.06389].
         
         """
-        return self.max_alpha*np.exp(-1/(kink*sat+self.safety_margin))    
+        return self.max_alpha*np.exp(-self.b/(kink*sat+self.safety_margin))    
 
 
     def calculate_local_growth_velocity(self, sat, kink):
@@ -800,20 +804,25 @@ class GrowthUtilities:
 
 class SnowflakeSimulation:
 
-    def __init__(self, L, max_diffusion_iter, max_cycles=100, initial_sat=1): ########################################## add all simulation parameters later
+    def __init__(self, L, max_diffusion_iter, max_cycles=100, initial_sat=1, initial_seed_half_width=3): ########################################## add all simulation parameters later
+        # simulation zone geometry
         self.L = L
         self.W = (L+1)//2
+
+        # initial saturation to fill
         self.initial_sat = initial_sat
+
+        self.initial_seed_half_width = initial_seed_half_width
 
         self.global_time = 0.0
 
         self.max_diffusion_iter = max_diffusion_iter
         self.max_cycles = max_cycles
 
-        # initialize default ice map
-        self.ice_map = self._construct_minimal_ice_map()
+        # initialize hexagonal ice map
+        self.ice_map = self._construct_hexagonal_ice_map()
 
-        # # initialize default saturation map
+        # initialize default saturation map
         self.sat_map = self._initialize_sat_map()
 
         # intialization of all useful subclasses
@@ -843,7 +852,7 @@ class SnowflakeSimulation:
 
         return np.full((self.L, self.W), self.initial_sat, dtype=np.float64)
 
-    def _construct_minimal_ice_map(self):
+    def _construct_hexagonal_ice_map(self):
         """ Function that constructs the minimal ice map defined 
         in the model (4 cells).
 
@@ -861,17 +870,12 @@ class SnowflakeSimulation:
         """
         ice_map = np.full((self.L, self.W), False) # initialize 'empty' ice_map
 
-        # minimum amount of initial ice that doesn't brick the model
-        minimal_ice_coords = np.array([
-            [self.L-1,0],
-            [self.L-2,0],
-            [self.L-3,0],
-            [self.L-3,1]
-        ])
+        # set all cells within half breadth to ice
+        for line in range(self.L-self.initial_seed_half_width, self.L):
+            for col in range((self.L-line+1)//2):
+                ice_map[line, col] = True
 
-        for coords in minimal_ice_coords:
-            ice_map[coords[0], coords[1]] = True # sets specified cells to be ice
-
+        # returns initialized ice map
         return ice_map
 
 
@@ -890,10 +894,10 @@ class SnowflakeSimulation:
         normal_cells, boundary_cells = self.GeneralU.distinguish_cells(self.ice_map, boundary_map)
         opp_array = self.GeneralU.construct_opp_array(boundary_cells, self.ice_map, neighbor_array)
 
+        # status every 100 cycles
         for c in range(max_cycles):
             if c%100 == 0:
                 print(f"Iteration {c}")
-
 
             """ STEP I : Relax sat_map """
 

@@ -804,55 +804,24 @@ class GrowthUtilities:
 
 class SnowflakeSimulation:
 
-    def __init__(self, L, max_diffusion_iter, max_cycles=100, initial_sat=1, initial_seed_half_width=3): ########################################## add all simulation parameters later
+    def __init__(self, L, max_diffusion_iter=200, D_x=1, v_kin=1): 
+        
         # simulation zone geometry
         self.L = L
         self.W = (L+1)//2
 
-        # initial saturation to fill
-        self.initial_sat = initial_sat
-
-        self.initial_seed_half_width = initial_seed_half_width
-
+        # intialize global time
         self.global_time = 0.0
-
-        self.max_diffusion_iter = max_diffusion_iter
-        self.max_cycles = max_cycles
-
-        # initialize hexagonal ice map
-        self.ice_map = self._construct_hexagonal_ice_map()
-
-        # initialize default saturation map
-        self.sat_map = self._initialize_sat_map()
 
         # intialization of all useful subclasses
         self.GeneralU = GeneralUtilities(self.L)
-        self.PhysicsU = PhysicsUtilities(1,1) # make it so this can be changed!
-        self.RelaxationU = SaturationRelaxationUtilities(self.L, self.max_diffusion_iter)
+        self.PhysicsU = PhysicsUtilities(D_x, v_kin) # make it so this can be changed!
+        self.RelaxationU = SaturationRelaxationUtilities(self.L, max_diffusion_iter)
         self.GrowthU = GrowthUtilities(self.L)
 
     ### Private methods ###
 
-    def _initialize_sat_map(self):
-        """ Function that initializes the saturation map at a 
-        constant value `initial_sat`.
-
-        Arguments
-        ---------
-        l : int
-            Total length of the restricted simulation zone (1/12th) 
-            of total snowflake.
-        w : int
-            Total width of the restricted simulation zone.
-
-        Return
-        ------
-        The initialized saturation map. (array(float, 2d))
-        """ 
-
-        return np.full((self.L, self.W), self.initial_sat, dtype=np.float64)
-
-    def _construct_hexagonal_ice_map(self):
+    def _construct_hexagonal_ice_map(self, initial_seed_half_width):
         """ Function that constructs the minimal ice map defined 
         in the model (4 cells).
 
@@ -871,7 +840,7 @@ class SnowflakeSimulation:
         ice_map = np.full((self.L, self.W), False) # initialize 'empty' ice_map
 
         # set all cells within half breadth to ice
-        for line in range(self.L-self.initial_seed_half_width, self.L):
+        for line in range(self.L-initial_seed_half_width, self.L):
             for col in range((self.L-line+1)//2):
                 ice_map[line, col] = True
 
@@ -882,28 +851,34 @@ class SnowflakeSimulation:
     ### Public methods ###
 
 
-    def run_simulation(self, max_cycles, epsilon): ################################# FILL OUT ARGUMENTS maybe move some
+    def run_simulation(self, cycle_amount, epsilon=0.001, initial_seed_half_width=3, initial_sat=1): ################################# FILL OUT ARGUMENTS maybe move some
         
         """ STEP 0 : Initialize values """
+
+        # initializing HEXAGONAL ice map seed
+        ice_map = self._construct_hexagonal_ice_map(initial_seed_half_width)
+
+        # intializing sat map 
+        sat_map = np.full((self.L, self.W), initial_sat, dtype=np.float64)
 
         # Fetch the neighbor array
         neighbor_array = self.GeneralU.neighbor_array
 
         # Initializing quantities that must be generated every time ice map changes
-        boundary_map = self.GeneralU.construct_boundary_map(self.ice_map)
-        normal_cells, boundary_cells = self.GeneralU.distinguish_cells(self.ice_map, boundary_map)
-        opp_array = self.GeneralU.construct_opp_array(boundary_cells, self.ice_map, neighbor_array)
+        boundary_map = self.GeneralU.construct_boundary_map(ice_map)
+        normal_cells, boundary_cells = self.GeneralU.distinguish_cells(ice_map, boundary_map)
+        opp_array = self.GeneralU.construct_opp_array(boundary_cells, ice_map, neighbor_array)
 
         # status every 100 cycles
-        for c in range(max_cycles):
+        for c in range(cycle_amount):
             if c%100 == 0:
                 print(f"Iteration {c}")
 
             """ STEP I : Relax sat_map """
 
             # relaxes the sat map
-            self.sat_map = self.RelaxationU.diffuse_to_convergence(
-                self.sat_map, 
+            sat_map = self.RelaxationU.diffuse_to_convergence(
+                sat_map, 
                 epsilon, 
                 normal_cells, 
                 boundary_cells,
@@ -915,11 +890,11 @@ class SnowflakeSimulation:
 
             """ STEP II : Update filling, timing and ice """
             # Update minimal time and then increment global time
-            self.GrowthU.update_minimum_time(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
+            self.GrowthU.update_minimum_time(boundary_cells, sat_map, boundary_map, self.PhysicsU)
             self.global_time += self.GrowthU.minimum_time_increment
 
-            self.GrowthU.update_filling_array(boundary_cells, self.sat_map, boundary_map, self.PhysicsU)
-            self.ice_map, ice_map_progressed = self.GrowthU.ammend_ice_map_from_filling(self.ice_map)
+            self.GrowthU.update_filling_array(boundary_cells, sat_map, boundary_map, self.PhysicsU)
+            ice_map, ice_map_progressed = self.GrowthU.ammend_ice_map_from_filling(ice_map)
             
         
             """ STEP III : Update boundary array *****and things like that***** """
@@ -927,16 +902,16 @@ class SnowflakeSimulation:
             if ice_map_progressed:
 
                 # reconstructing ice_map dependant quantities
-                boundary_map = self.GeneralU.construct_boundary_map(self.ice_map)
-                normal_cells, boundary_cells = self.GeneralU.distinguish_cells(self.ice_map, boundary_map)
-                opp_array = self.GeneralU.construct_opp_array(boundary_cells, self.ice_map, neighbor_array)
+                boundary_map = self.GeneralU.construct_boundary_map(ice_map)
+                normal_cells, boundary_cells = self.GeneralU.distinguish_cells(ice_map, boundary_map)
+                opp_array = self.GeneralU.construct_opp_array(boundary_cells, ice_map, neighbor_array)
 
             """ STEP IV : Assess if up to spec """
             
             ################################# Determine a good break condition
 
             
-        return self.ice_map
+        return ice_map
 
 
 if __name__ == "__main__":

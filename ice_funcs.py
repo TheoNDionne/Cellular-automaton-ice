@@ -324,7 +324,7 @@ class PhysicsUtilities:
         Loosely based off of [arXiv:1910.06389].
         
         """
-        return self.max_alpha*np.exp(-self.b/(kink*sat+self.safety_margin))    
+        return self.max_alpha*kink*np.exp(-self.b/(kink*sat+self.safety_margin))    
 
 
     def calculate_local_growth_velocity(self, sat, kink):

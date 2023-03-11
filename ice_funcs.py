@@ -73,6 +73,31 @@ import numba as nb
 })
 class GeneralUtilities:
     """ Class that implements utilities that are related to general bookkeeping.
+
+    Attributes
+    ----------
+    L : int
+        Number of cells in the long axis of the model
+    W : int
+        Number of cells in the short axis of the model
+    neighbor_array : array(float, 4d)
+        Array that keeps track of the neighbors. Array is indexed with the follo-
+        wing indexes neighbor_array[i,j,k,l], where:
+        - i : line of the cell for which to get neighbors.
+        - j : column of the cell for which to get neighbors.
+        - k : 'neighbor index' (6 possibilities for hexagonal cells).
+        - l : toggle between line and column of neighbor at index `k`.
+
+    Public Methods
+    --------------
+    distinguish_cells : 
+        Generates an array of oordinates for normal gas cells and boundary gas cells.
+    construct_boundary_array : 
+        Constructs the boundary array that maps the kink number for every cell in the 
+        simulation zone.
+    construct_opp_array
+        Constructs the opp array that contains up to 3 neighbor indices for every 
+        boundary cell.
     """
 
     def __init__(self, L):
@@ -82,8 +107,10 @@ class GeneralUtilities:
         ----------
         L : int
             total length of the 1/12th slice of simulation zone.
-        W : int
-            total width of the 1/12th slice of simulation zone.
+        
+        Return
+        ------
+        [None]
         """
         self.L = L
         self.W = (self.L+1)//2
@@ -91,7 +118,7 @@ class GeneralUtilities:
         # 'One time runs' for geometry-dependent utilities
         self.neighbor_array = self._construct_neighbor_array() # construct neighbor array
 
-    ### PRIVATE METHODS ###
+    """PRIVATE METHODS"""
 
     def _is_legit_cell(self, line, col):
         """ Function that verified that provided coordinates are 
@@ -106,7 +133,7 @@ class GeneralUtilities:
 
         Return
         ------
-        Returns if the cell is a legit simulation cell. (bool)
+        Returns if the cell is a legit simulation cell. [bool]
         """
         return line<self.L and col<(self.L - line + 1)//2 and line>=0 and col>=0
 
@@ -120,12 +147,10 @@ class GeneralUtilities:
             The line of the cell to check in the model.
         col : int
             The column of the cell to check in the model.
-        L : int
-            Total length of the model. 
 
         Return
         ------
-        The neighbors of cell at position (line, col) in the model (array(float, 2d)).
+        The neighbors of cell at position (line, col) in the model [array(float, 2d)].
         If there is no neighbor, coords are replaced by `np.nan`. Array of the form 
         Arr[k,l], where:
         - k : 'neighbor index' (6 possibilities for hexagonal cells).
@@ -141,29 +166,21 @@ class GeneralUtilities:
             [0,-1]
         ])
 
-        absolute_nearest_neighbors = np.empty((6, 2))
+        absolute_nearest_neighbors = np.empty((6, 2)) # intialize nearest neighbor sub-array
 
         for i in range(np.shape(relative_nearest_neighbors)[0]):
-            neighbor_line = line + relative_nearest_neighbors[i,0]
-            neighbor_col = col + relative_nearest_neighbors[i,1]
+            neighbor_line = line + relative_nearest_neighbors[i,0] # absolute coordinate line of neighbor
+            neighbor_col = col + relative_nearest_neighbors[i,1] # absolute coordinate col of neighbor
 
             if self._is_legit_cell(neighbor_line, neighbor_col):
-                absolute_nearest_neighbors[i, :] = [neighbor_line, neighbor_col]
+                absolute_nearest_neighbors[i, :] = [neighbor_line, neighbor_col] # coordinates if valid neighbor
             else:
-                absolute_nearest_neighbors[i, :] = [np.nan, np.nan]
+                absolute_nearest_neighbors[i, :] = [np.nan, np.nan] # empty value if not neighbor
 
         return absolute_nearest_neighbors
 
     def _construct_neighbor_array(self):
         """ Constructs the array of nearest neighbors for all cells in the model.
-
-        Arguments
-        ---------
-        l : int
-            Total length of the restricted simulation zone (1/12th) 
-            of total snowflake.
-        w : int
-            Total width of the restricted simulation zone. 
 
         Return
         ------
@@ -178,58 +195,94 @@ class GeneralUtilities:
 
         for line in range(self.L):
             for col in range((self.L - line + 1)//2):
-                neighbor_array[line, col, :, :] = self._get_neighbors(line, col)
+                # add in local neigbor array at every coordinate in model
+                neighbor_array[line, col, :, :] = self._get_neighbors(line, col) 
 
         return neighbor_array
 
     def _get_opp_neighbor_indices(self, ice_map, local_neighbors):
         """ A function that returns up to the three neighbor indices corresponding 
-        to the three possible neighbor cells.
-        """
-        opposing_indices = np.array([3,4,5,0,1,2]) # in 'neighbor index' form
-        local_opp_array = np.full(3, np.nan, dtype=np.float32)
+        to the three possible opposing cells to a boundary cell.
 
+        Arguments
+        ---------
+        ice_map : array(bool, 2d)
+            Boolean mask representing ice status of a cell.
+        local_neigbors : array(float, 2d)
+            Restriction of neighbor array to neigbor_array[line,col,:,:]
+
+        Return
+        ------
+        The local opposing cell array [array(float, 1d)]. If there's an opposing cell,
+        then the `neighbor index` is present. If not, then element is `np.nan`.
+        
+        """
+        opposing_indices = np.array([3,4,5,0,1,2]) # all potential neigbhor indices
+        local_opp_array = np.full(3, np.nan, dtype=np.float32) # initialize local opp arr
+
+        # zero opp counter
         opps_detected = 0
-        for i in range(np.shape(local_neighbors)[0]):
+        for i in range(np.shape(local_neighbors)[0]): # check forall local neighbors
+            # get coordinates of neighbor from neighbor index
             neighbor_line = local_neighbors[i,0]
             neighbor_col = local_neighbors[i,1]
 
+            # get coordinates of potential opp cell from neighbor index
             opp_line = local_neighbors[opposing_indices[i],0]
             opp_col = local_neighbors[opposing_indices[i],1]
 
-            if not np.isnan(neighbor_line) and not np.isnan(opp_line):
+            if not np.isnan(neighbor_line) and not np.isnan(opp_line): # check that both coordinates exist (not np.nan)
+                # if neigbhor is an ice cell and opp isn't, add neighbor index
                 if ice_map[int(neighbor_line), int(neighbor_col)] == True and ice_map[int(opp_line), int(opp_col)] == False:
                     local_opp_array[opps_detected] = opposing_indices[i] # adds opposing 'neighbor index'
                     opps_detected += 1
 
         return local_opp_array
 
-    ### PUBLIC METHODS ###
+    """PUBLIC METHODS"""
 
     def distinguish_cells(self, ice_map, boundary_map):
+        """ Function that creates two arrays of coordinates : one that contains the 
+        boundary cells and one that contains the 'typical' gas cells.
+        
+        Attributes
+        ----------
+        ice_map : array(bool, 2d)
+            Boolean mask representing ice status of a cell.
+        boundary_map : array(int, 2d)
+            Map that represents the amount of next-neighbor ice cells (kink) for 
+            each cell.
+
+        Return
+        ------
+        A tuple of numpy arrays representing the coordinates of normal gas cells 
+        and boundary gas cells. [Tuple(array(int, 2d), array(int, 2d))]
+        """
+        #initialize coordinate lists
         X_normal = []
         Y_normal = []
-        
         X_boundary = []
         Y_boundary = []
 
+        # distinguishing over the possible simulation cells
         for line in range(1,self.L):
             for col in range((self.L-line+1)//2):
-                if not ice_map[line, col]:
-                    if boundary_map[line, col] == 0:
+                if not ice_map[line, col]: # checks if not ice cell
+                    if boundary_map[line, col] == 0: # appends to normal cell if kink=0
                         X_normal.append(line)
                         Y_normal.append(col)
-                    else:
+                    else: # if kink=/=0 then append coords to boundary cell
                         X_boundary.append(line)
                         Y_boundary.append(col)
 
+        # formatting both lists as numpy arrays
         normal_cells = np.transpose(np.array([X_normal, Y_normal]))
         boundary_cells = np.transpose(np.array([X_boundary, Y_boundary]))
         
         return normal_cells, boundary_cells
 
     def construct_boundary_map(self, ice_map): 
-        """ Function that constructs a map of all boudary pixels. The number 
+        """ Function that constructs a map of all boundary pixels. The number 
         ascribed to each cell is the number of nearest neighbors (AKA: the kink number).
 
         Arguments
@@ -242,8 +295,8 @@ class GeneralUtilities:
         
         Return
         ------
-        The two dimensional map of the amount of neighboring ice cells (excluding 
-        ice cells themselves). (array(int, 2d))
+        The 2D map of the amount of neighboring ice cells (excluding ice cells 
+        themselves). [array(int, 2d)]
         """
         boundary_map = np.zeros((self.L, self.W), dtype=np.int8) # initialize boundary map
 
@@ -251,40 +304,54 @@ class GeneralUtilities:
             for col in range((self.L - line + 1)//2):
                 neighbor_coords = self.neighbor_array[line, col, :, :].copy() # returns 6x2 array
                 
-                neighbor_counter = 0
+                neighbor_counter = 0 # zero amount of neighbors
 
-                if not ice_map[line, col]:
+                if not ice_map[line, col]: # check that cell isn't ice
                     for i in range(np.shape(neighbor_coords)[0]):
+                        # neighbor coords from neighbor index
                         neighbor_line = neighbor_coords[i,0]
                         neighbor_col = neighbor_coords[i,1]
 
-                        if not np.isnan(neighbor_line):
+                        if not np.isnan(neighbor_line): # checks if neighbor exists in model
                             if ice_map[int(neighbor_line), int(neighbor_col)] == True:
-                                neighbor_counter += 1
+                                neighbor_counter += 1 # increment number of neighbors if neigbor cell is ice
 
+                # set the boundary_map to the amount of next-door neighbors
                 boundary_map[line, col] = neighbor_counter
 
         return boundary_map
     
     def construct_opp_array(self, boundary_cells, ice_map, neighbor_array):
-        """ Constructs an array that contains the coordinates of 'opposing cells'
+        """ Constructs an array that contains the coordinates of opposing cells for 
+        every neighbor cell.
+
+        Arguments
+        ---------
+        boundary_cells : array(int, 2d)
+            List of coordinates of all the boundary cells in the model.
+        ice_map : array(bool, 2d)
+            The boolean map that represents the physical location of ice cells.
+        neighbor_array : array(float, 4d)
+            The array representing neigbors in the model of the form produced by 
+            construct_neighbor_array().
+
         """
-        array_length = np.shape(boundary_cells)[0]
-        opp_array = np.empty((array_length, 3)) 
+        boundary_cell_amount = np.shape(boundary_cells)[0]
+        opp_array = np.empty((boundary_cell_amount, 3)) # initialize opp array
         
-        for i in range(array_length):
+        for i in range(boundary_cell_amount): # append an element for every boundary cell
             line = int(boundary_cells[i,0])
             col = int(boundary_cells[i,1])
-            local_neighbors = neighbor_array[line, col, :, :]
+            local_neighbors = neighbor_array[line, col, :, :] # getting local neighbor array for boundary coord
 
-            opp_array[i,:] = self._get_opp_neighbor_indices(ice_map, local_neighbors)
+            opp_array[i,:] = self._get_opp_neighbor_indices(ice_map, local_neighbors) # update to opp array
 
         return opp_array
                 
 
-# Define type of GeneralUtilities class instance
-GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
-GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
+# # Define type of GeneralUtilities class instance
+# GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
+# GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
 
 
 """###############################################################
@@ -306,15 +373,21 @@ GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type)
 class PhysicsUtilities:
 
     def __init__(self, D_x, v_kin, b=1, max_alpha=1, X_0=1, G=1, H=1, safety_margin=1e-7):
+        
+        # simulation parameters
         self.D_x = D_x
+        self.X_0 = X_0
         self.v_kin = v_kin
 
+        # attachment coefficient
         self.max_alpha = max_alpha
         self.b = b
         
-        self.X_0 = X_0
+        # optionnal geometrical factors
         self.G = G
         self.H = H
+
+        # safety margin to keep division by zero
         self.safety_margin = safety_margin
 
 

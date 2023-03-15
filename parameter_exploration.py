@@ -11,16 +11,16 @@ from csv import writer
 L = 551
 
 # amount of cycles
-CYCLES = 5000
+CYCLES = 20000
 
 # parameter values
-B_VALUES = np.array([0.5,1,3,5,7,10,15])
-MAX_ALPHA_VALUES = np.array([0.5,1,2])
-D_X_VALUES = np.array([0.5,1,2])
-X_0_VALUES = np.array([0.5,1,2])
+B_VALUES = np.array([0.1,0.5,1,5,10])
+MAX_ALPHA_VALUES = np.array([0.5])
+D_X_VALUES = np.array([1])
+X_0_VALUES = np.array([1])
 
 # filename
-OUTPUT_DIR = "exploration_first_pass"
+OUTPUT_DIR = "gaming_as_hell_half"
 
 """ PROCEDURE """
 
@@ -40,7 +40,7 @@ with open(f"{OUTPUT_DIR}/specs.csv", 'a') as f_object:
 
     # Pass the list as an argument into
     # the writerow()
-    writer_object.writerow(["Simulation number", "b", "max_alpha", "D_x", "X_0"])
+    writer_object.writerow(["Simulation number", "b", "max_alpha", "D_x", "X_0", f"Cycles={CYCLES}"])
 
     # Close the file object
     f_object.close()

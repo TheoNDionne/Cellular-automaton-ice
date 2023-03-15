@@ -335,6 +335,11 @@ class GeneralUtilities:
             The array representing neigbors in the model of the form produced by 
             construct_neighbor_array().
 
+            
+        Return
+        ------
+        The array that contains the neighbor indices of a possible opposing cell.
+        [array(float, 2d)]
         """
         boundary_cell_amount = np.shape(boundary_cells)[0]
         opp_array = np.empty((boundary_cell_amount, 3)) # initialize opp array
@@ -371,9 +376,42 @@ class GeneralUtilities:
     "safety_margin" : nb.float32
 })
 class PhysicsUtilities:
+    """ Class that incorporates methods that implement physical processes as 
+    described in 'Snow Crystals' by K.G. Libbrecht.
+    NOTE : All operation that depend on physical constants are located here!
 
-    def __init__(self, D_x, v_kin, b=1, max_alpha=1, X_0=1, G=1, H=1, safety_margin=1e-7):
-        
+    Attributes
+    ----------
+    D_x : float
+        Physical size of a cell as measured via the the distance between 
+        two opposing summits of a hexagonal cell.
+    v_kin : float
+        Physical velocity of water vapor particles in air.
+    b : float
+        Parameter with the dimensions of the water supersaturation field. 
+        Regulates the shape of the exponential.
+    max_alpha : float
+        Parameter with the units of the attachment coefficient. Regulates 
+        the maximum value of the attachment coefficient.
+    X_0 : float
+        Characteristic diffusion length in the model.
+    G : float
+        Intrinsic unitless geometrical correction factor for the attachment process.
+    H : float
+        Intrinsic unitless geometrical correction factor for the growth process.
+    safety_margin : float
+        Small float for zero division protection
+
+    Public methods
+    ---------------
+    calculate_attachment_coefficient_with_kink : 
+        Function that represents the physical attachment coefficient functionnal.
+    
+    """
+
+    def __init__(self, D_x=1, v_kin=1, b=1, max_alpha=1, X_0=1, G=1, H=1, safety_margin=1e-7):
+        """Class initializer method"""
+
         # simulation parameters
         self.D_x = D_x
         self.X_0 = X_0
@@ -395,33 +433,78 @@ class PhysicsUtilities:
         """ Method that determines the attachment coefficient as a function of local 
         water vapor saturation and the amount of nearest neighbor (kink number). 
         Loosely based off of [arXiv:1910.06389].
-        
+
+        Arguments
+        ---------
+        sat : float
+            Value of the supersaturation field locally.
+        kink : int
+            Amount of nearest neighbors.
+
+        Return
+        ------
+        Attachment coefficient. [float]
         """
         return self.max_alpha*kink*np.exp(-self.b/(kink*sat+self.safety_margin))    
 
 
     def calculate_local_growth_velocity(self, sat, kink):
-        """
+        """ Calculates the growth velocity of the ice surface locally.
 
+        Arguments
+        ---------
+        sat : float
+            Value of the supersaturation field locally.
+        kink : int
+            Amount of nearest neighbors.
+
+        Return
+        ------
+        Local growth velocity coefficient. [float]
         """
         alpha = self.calculate_attachment_coefficient_with_kink(sat, kink)
 
         return alpha*self.v_kin*sat
 
 
-    def calculate_growth_time(self, sat, kink, f_b):
-        """
+    def calculate_growth_time(self, sat, kink, filling_factor):
+        """ Calculates time increment required for a given cell to "grow" 
+        as a function of its filling factor.
+
+        Arguments
+        ---------
+        sat : float
+            Value of the supersaturation field locally.
+        kink : int
+            Amount of nearest neighbors.
+        filling_factor : float
+            A real number between 0 and 1 representing how close a given 
+            boundary cell is to becoming ice.
         
+        Return
+        ------
+        The growth velocity at a given boundary cell. [float]
         """
         v_growth = self.calculate_local_growth_velocity(sat, kink)
-        growth_time_increment = self.H*self.D_x*(1-f_b)/v_growth
+        growth_time_increment = self.H*self.D_x*(1-filling_factor)/v_growth
 
         return growth_time_increment
 
 
     def get_min_growth_time(filling_timing_array, boundary_cells):
-        """
-        
+        """ Function that calculates ALL growth times and then returns the shortest one.
+
+        Arguments
+        ---------
+        filling_timing_array : array(float, 2d)
+            An array containing all the times the growth times for the given iteration 
+            of the growth step (indexed by position).
+        boundary_cells : array(int, 2d)
+            List of coordinates of all the boundary cells in the model.
+            
+        Return
+        ------
+        The shortest growth time. [float]
         """
         boundary_cell_amount = np.shape(boundary_cells)[0]
         growth_time_array = np.empty(boundary_cell_amount)
@@ -435,25 +518,76 @@ class PhysicsUtilities:
 
 
     def apply_boundary_condition(self, line, col, sat_map, sat_opp_avg, boundary_map):
-        local_sat = sat_map[line, col]
-        kink_number = boundary_map[line, col]
+        """Function that applies the vapor-ice boundary condition by returning a saturation 
+        value as a function of local and near-neighbor values.
+        
+        Arguments
+        ---------
+        line : int
+            Line of the cell at which to apply boundary_condition.
+        col : int
+            Column at which to apply boundary condition.
+        sat_map : array(float, 2d)
+            The saturation field.
+        sat_opp_avg : 
+            Average value of the opposing cells of the given boundary cell.
+        boundary_map : array(int, 2d)
+            Map that represents the amount of next-neighbor ice cells (kink) for 
+            each cell.
 
+        Return
+        ------
+        The new saturation on the boundary pixel as defined by the boundary condition.
+        """
+        local_sat = sat_map[line, col] # get local saturation
+        kink_number = boundary_map[line, col] # get amount of local neighbors
+
+        # calculate attachment coefficient
         alpha = self.calculate_attachment_coefficient_with_kink(local_sat, kink_number)
 
         return sat_opp_avg/(1 + alpha*self.G*self.D_x/self.X_0) # returns the new saturation of the boundary cell
 
 
     def calculate_filling_factor_increment(self, sat, kink, dt_min):
+        """ Calculate by how much to increment the filling factor of each boundary cell.
+
+        Arguments
+        ---------
+        sat : float
+            Value of the supersaturation field locally.
+        kink : int
+            Amount of nearest neighbors.
+        dt_min : float
+            Value of the smallest growth time interval in the current step of the 
+            growth cycle.
+
+        Return
+        ------
+        Number by which to increment the filling factor. [float]
         """
-        """
-        v_growth = self.calculate_local_growth_velocity(sat, kink) 
+        v_growth = self.calculate_local_growth_velocity(sat, kink) # growth velocity
 
         # inspired by K.G. Libbrecht
         return v_growth*dt_min/(self.H*self.D_x)
 
 
     def calculate_growth_time_increment(self, sat, kink, filling_factor):
-        """
+        """ Calculate by how much to increment the growth time of each boundary cell.
+
+        Arguments
+        ---------
+        sat : float
+            Value of the supersaturation field locally.
+        kink : int
+            Amount of nearest neighbors.
+        filling_factor : float
+            Filling factor of the cell for which the growth time increment must be 
+            calculated.
+
+        Return
+        ------
+        The number by which to increment the growth time of the specified boundary cell.
+        [float]
         """
         v_growth = self.calculate_local_growth_velocity(sat, kink)
         
@@ -478,10 +612,12 @@ class PhysicsUtilities:
     "diffusion_rules" : nb.float32[:,:,::1]
 })
 class SaturationRelaxationUtilities:
-    """FILL OUT"""
+    """ A class that regroups methods with the common purpose of allowing for the 
+    
+    """
 
     def __init__(self, L, max_iter):
-        """
+        """ Class contructor method.
         """
         self.L = L
         self.W = (L+1)//2

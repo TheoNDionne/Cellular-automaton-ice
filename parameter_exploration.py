@@ -14,13 +14,13 @@ L = 551
 CYCLES = 20000
 
 # parameter values
-B_VALUES = np.array([0.05, 0.075, 0.1, 0.2, 0.3])
-MAX_ALPHA_VALUES = np.array([0.5,1,1.5])
+B_VALUES = np.array([0.05, 0.1, 0.2,0.5,1,2,5,10])
+MAX_ALPHA_VALUES = np.array([1])
 D_X_VALUES = np.array([1])
 X_0_VALUES = np.array([1])
 
 # filename
-OUTPUT_DIR = "dendrite_search"
+OUTPUT_DIR = "exemple_raw_sweep"
 
 """ PROCEDURE """ 
 

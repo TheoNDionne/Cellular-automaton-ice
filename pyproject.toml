@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "Cellular automaton simulation of 2 dimensionnal ice crystal"
 authors = ["Theo N. Dionne <theo.nathaniel.dionne@usherbrooke.ca>"]
 readme = "README.md"
-packages = [{include = "cellular_automaton_ice"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
+pandas = "^1.5.3"
 
 
 [build-system]

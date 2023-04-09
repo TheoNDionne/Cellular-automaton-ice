@@ -1124,18 +1124,16 @@ class SnowflakeSimulation:
 
 
 if __name__ == "__main__":
-    L = 1001
+    L = 551
+    CYCLES = 1000
 
-    gu = GeneralUtilities(L)
-    ss = SnowflakeSimulation(L, 200)
+    Simulation = SnowflakeSimulation(L) # init of simulation object
+    ice_map = Simulation.run_simulation(CYCLES) # running default simulation
 
-    ice_map_test = ss._construct_minimal_ice_map()
-    # ice_map_test[L-4, 0] = True 
+    reference_ice_map = np.genfromtxt("reference_ice_map.csv", dtype=np.int8).astype("bool") # fetch reference ice array
 
-    # sat_map_test = ss._initialize_sat_map()
-    boundary_map_test = gu.construct_boundary_map(ice_map_test)
-
-    print(ice_map_test[-5:,:5])
-    # print(sat_map_test[-5:,:5])
-    print(boundary_map_test[-5:,:5])
-    
+    # compare reference with default to confirm if simulation is working
+    if np.array_equal(ice_map, reference_ice_map):
+        print("Test passed")
+    else:
+        print("Test failed")

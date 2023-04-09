@@ -1,13 +1,17 @@
 [tool.poetry]
 name = "cellular-automaton-ice"
 version = "0.1.0"
-description = "Cellular automaton simulation of 2 dimensionnal ice crystal"
+description = "Repo that comprises code to simulate the growth of 2D snowflakes using a cellular automaton."
 authors = ["Theo N. Dionne <theo.nathaniel.dionne@usherbrooke.ca>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pandas = "^1.5.3"
+numpy = "1.21.1"
+numba = "^0.56.4"
+pandas = "1.2.1"
+matplotlib = "^3.7.1"
+seaborn = "^0.12.2"
 
 
 [build-system]

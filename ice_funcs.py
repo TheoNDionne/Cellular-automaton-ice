@@ -1,8 +1,11 @@
 """
-Code used to simulate the formation of a C6v symmetric snowflakes.
+Code used to simulate the formation of C6v symmetric snowflakes to 
+via a 2D cellular automaton model.
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!! Re-implementation of bits of code found in numpy are due to !!!
 !!! restricted numpy support in numba.                          !!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 Classes
 -------
@@ -15,7 +18,7 @@ GeneralUtilities:
 PhysicsUtilities:
     A class that groups methods that execute "physical calculations", 
     such as the boundary growth velocity. Usually, methods there 
-    depend on physical parameters.
+    depend on the physical constants and parameters.
 
 SaturationRelaxationUtilities:
     A class that allows for two major things:
@@ -31,7 +34,8 @@ GrowthUtilities:
 SnowflakeSimulation:
     A class that comprises the general parts of the simulation such 
     as the map of ice cells and the map of water saturation in the
-    simulation.  
+    simulation. THIS CLASS ALLOWS FOR THE HIGH LEVEL SIMULATION OF 
+    THE SNOWFLAKE.
 
 
 NOTE: To keep track of a hexagonal grid with rectangular arrays, one 
@@ -56,6 +60,7 @@ Snow Crystals, i.e.:
 The number present in the cells indicate the so-called "neighbor index" 
 relative to the central cell denoted by "X".
 """
+
 
 import numpy as np
 import numba as nb
@@ -215,7 +220,6 @@ class GeneralUtilities:
         ------
         The local opposing cell array [array(float, 1d)]. If there's an opposing cell,
         then the `neighbor index` is present. If not, then element is `np.nan`.
-        
         """
         opposing_indices = np.array([3,4,5,0,1,2]) # all potential neigbhor indices
         local_opp_array = np.full(3, np.nan, dtype=np.float32) # initialize local opp arr
@@ -354,11 +358,6 @@ class GeneralUtilities:
         return opp_array
                 
 
-# # Define type of GeneralUtilities class instance
-# GeneralUtilities_instance_type = nb.deferred_type() # initialize GeneralUtilities instance type
-# GeneralUtilities_instance_type.define(GeneralUtilities.class_type.instance_type) # define GeneralUtilities' type as it's own type
-
-
 """###############################################################
                     Physics-based functions
          (mostly based on [arXiv:1910.06389, chap.5])
@@ -428,6 +427,7 @@ class PhysicsUtilities:
         # safety margin to keep division by zero
         self.safety_margin = safety_margin
 
+    ### PRIVATE METHODS ###
 
     def calculate_attachment_coefficient_with_kink(self, sat, kink):
         """ Method that determines the attachment coefficient as a function of local 
@@ -593,11 +593,6 @@ class PhysicsUtilities:
         
         # inspired by K.G. Libbrecht
         return self.H*self.D_x*(1 - filling_factor)/(v_growth+self.safety_margin) 
-
-
-# # Define type of PhysicsUtilities class instance
-# PhysicsUtilities_instance_type = nb.deferred_type() # initialize PhysicsUtilities instance type
-# PhysicsUtilities_instance_type.define(PhysicsUtilities.class_type.instance_type) # define PhysicsUtilities' type as it's own type
 
 
 """###############################################################
@@ -855,21 +850,11 @@ class SaturationRelaxationUtilities:
         return new_sat, False, i # returns unconverged array with failure status
 
 
-
-############################################################################# ADD BACK WHEN DONE
-# # Define type of SaturationRelaxationUtilities class instance
-# SaturationRelaxationUtilities_instance_type = nb.deferred_type() # initialize SaturationRelaxationUtilities instance type
-# SaturationRelaxationUtilities_instance_type.define(SaturationRelaxationUtilities.class_type.instance_type) # define SaturationRelaxationUtilities' type as it's own type
-
-
 """###############################################################
                         Growth utilities
 ###############################################################"""
 
 
-"""
-#### DO THING THAT INITIALIZES THE FILLING ARRAY AND THE TIME ARRAY
-"""
 @nb.experimental.jitclass({
     "L" : nb.int32,
     "W" : nb.int32,
@@ -877,7 +862,9 @@ class SaturationRelaxationUtilities:
     "minimum_time_increment" : nb.float32
 })
 class GrowthUtilities:
-    ############################ FILL OUT COMMENTS #############################
+    """
+    FDAFADFAFASFas
+    """
     def __init__(self, L):
         self.L = L
         self.W = (L+1)//2
@@ -885,37 +872,7 @@ class GrowthUtilities:
 
         self.minimum_time_increment = 0.0 # initialize minimum time increment
 
-    ### PRIVATE METHODS ###
-
     ### PUBLIC METHODS ###
-
-    # def update_timing_array(self, boundary_cells, sat_map, boundary_map):
-    #     """
-    #     ################# ONLY KEEP THE MINIMUM TIME INCREMENT!!
-    #     """
-
-    #     boundary_cell_amount = np.shape(boundary_cells)[0]
-    #     time_increments = np.empty(boundary_cell_amount)
-
-    #     for i in range(boundary_cell_amount):
-    #         line = boundary_cells[i,0]
-    #         col = boundary_cells[i,1]
-
-    #         # calculate growth time increment
-    #         growth_time_increment = self.PU.calculate_growth_time_increment(
-    #             sat_map[line,col], 
-    #             boundary_map[line,col], 
-    #             self.filling_array[line,col]
-    #         )
-    #         time_increments[i] = growth_time_increment # add growth time increment to a temp array
-
-    #         self.timing_array[line, col] += growth_time_increment  # add time increment to timing array
-
-    #     # get minimum time increment and update minimum_time_increment attribute
-    #     self.minimum_time_increment = np.min(time_increments) 
-
-    #     return None
-
 
     def update_minimum_time(self, boundary_cells, sat_map, boundary_map, PU):
         """Calculates the minimum time increment in the active boundary cells
@@ -960,26 +917,6 @@ class GrowthUtilities:
         return None 
 
 
-    # def get_cells_to_progress_from_filling_array(self):
-    #     """Get cells that have a filling index > 1 and then set them to np.nan
-    #     """
-        
-    #     filled_cell_lines = []
-    #     filled_cell_cols = []
-
-    #     for line in range(1,self.L):
-    #         for col in range((self.L-line+1)//2):
-    #             if self.filling_array[line,col] >= 1:
-    #                 # collect filled cell coordinates
-    #                 filled_cell_lines.append(line)
-    #                 filled_cell_cols.append(col)
-
-    #                 # set filled cells to np.nan to avoid recounting
-    #                 self.filling_array[line,col] = np.nan
-
-    #     return np.transpose(np.array([filled_cell_lines, filled_cell_cols]))
-
-
     def ammend_ice_map_from_filling(self, ice_map):
         """
         """
@@ -1000,11 +937,6 @@ class GrowthUtilities:
 
         return ice_map, ice_map_progressed
 
-############################################################################# ADD BACK WHEN DONE
-# # Define type of GrowthUtilities class instance
-# GrowthUtilities_instance_type = nb.deferred_type() # initialize GrowthUtilities instance type
-# GrowthUtilities_instance_type.define(GrowthUtilities.class_type.instance_type) # define GrowthUtilities' type as it's own type
-    
 
 """###############################################################
                         Simulation class
@@ -1056,9 +988,7 @@ class SnowflakeSimulation:
         # returns initialized ice map
         return ice_map
 
-
     ### Public methods ###
-
 
     def run_simulation(self, cycle_amount, epsilon=0.001, initial_seed_half_width=3, initial_sat=1): ################################# FILL OUT ARGUMENTS maybe move some
         
@@ -1115,22 +1045,22 @@ class SnowflakeSimulation:
                 normal_cells, boundary_cells = self.GeneralU.distinguish_cells(ice_map, boundary_map)
                 opp_array = self.GeneralU.construct_opp_array(boundary_cells, ice_map, neighbor_array)
 
-            """ STEP IV : Assess if up to spec """
-            
-            ################################# Determine a good break condition
-
-            
         return ice_map
 
 
 if __name__ == "__main__":
+    """
+    Does a test to check if simulation is running correctly by comparing 
+    a pre-generated ice map with a freshly generated ice map.
+    """
+    
     L = 551
     CYCLES = 1000
 
     Simulation = SnowflakeSimulation(L) # init of simulation object
     ice_map = Simulation.run_simulation(CYCLES) # running default simulation
 
-    reference_ice_map = np.genfromtxt("reference_ice_map.csv", dtype=np.int8).astype("bool") # fetch reference ice array
+    reference_ice_map = np.genfromtxt("data/reference_ice_map.csv", dtype=np.int8).astype("bool") # fetch reference ice array
 
     # compare reference with default to confirm if simulation is working
     if np.array_equal(ice_map, reference_ice_map):

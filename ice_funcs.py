@@ -875,7 +875,8 @@ class GrowthUtilities:
     ### PUBLIC METHODS ###
 
     def update_minimum_time(self, boundary_cells, sat_map, boundary_map, PU):
-        """Calculates the minimum time increment in the active boundary cells
+        """Calculates the minimum time increment in the active boundary cells 
+        and updates the minimum_time_increment_attricute
         """
 
         boundary_cell_amount = np.shape(boundary_cells)[0]
@@ -944,9 +945,36 @@ class GrowthUtilities:
 
 
 class SnowflakeSimulation:
+    """ A class that handles the actual simulating of the snowflakes
 
+        Attributes
+        ----------
+        L : int
+            Number of cells in the long axis of the model
+        W : int
+            Number of cells in the short axis of the model
+        global_time : float
+            The total elapsed time of the simulation
+        GeneralU : class instance object
+            An instance of GeneralUtilities
+        PhysicsU : class instance object
+            An instance of PhysicsUtilities
+        RelaxationU : class instance object
+            An instance of RelaxationUtilities
+        GrowthU : class instance object
+            An instance of GrowthUtilities
+            
+        Public methods
+        --------------
+        run_simulation : 
+            the method that simulates a snowflake and returns the 
+            appropriate ice_array
+        """
+    
     def __init__(self, L, max_diffusion_iter=200, D_x=1, v_kin=1): 
-        
+        """ Class initializer method, nuff said
+        """
+
         # simulation zone geometry
         self.L = L
         self.W = (L+1)//2
@@ -990,8 +1018,27 @@ class SnowflakeSimulation:
 
     ### Public methods ###
 
-    def run_simulation(self, cycle_amount, epsilon=0.001, initial_seed_half_width=3, initial_sat=1): ################################# FILL OUT ARGUMENTS maybe move some
+    def run_simulation(self, cycle_amount, epsilon=0.001, initial_seed_half_width=3, initial_sat=1):
+        """ The principal function used for simulating the snowflakes
+
+        Arguments
+        ---------
+        cycle_amount : int
+            Number of cycles in the cellular automaton algorithm
+        epsilon : float
+            Tolerance at which the supersaturation is considered converged
+        initial_seed_half_width : int
+            Half width of the initial ice crystal counted in cells
+        initial_sat : float
+            Initial fill value of the saturation map
         
+        Return
+        ------
+        The ice map of the generated crystal (array(bool, 2d))
+        
+        """
+
+
         """ STEP 0 : Initialize values """
 
         # initializing HEXAGONAL ice map seed
@@ -1032,6 +1079,7 @@ class SnowflakeSimulation:
             self.GrowthU.update_minimum_time(boundary_cells, sat_map, boundary_map, self.PhysicsU)
             self.global_time += self.GrowthU.minimum_time_increment
 
+            # Update the filling array
             self.GrowthU.update_filling_array(boundary_cells, sat_map, boundary_map, self.PhysicsU)
             ice_map, ice_map_progressed = self.GrowthU.ammend_ice_map_from_filling(ice_map)
             
@@ -1039,7 +1087,6 @@ class SnowflakeSimulation:
             """ STEP III : Update boundary array *****and things like that***** """
 
             if ice_map_progressed:
-
                 # reconstructing ice_map dependant quantities
                 boundary_map = self.GeneralU.construct_boundary_map(ice_map)
                 normal_cells, boundary_cells = self.GeneralU.distinguish_cells(ice_map, boundary_map)

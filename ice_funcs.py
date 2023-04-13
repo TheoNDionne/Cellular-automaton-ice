@@ -485,8 +485,9 @@ class PhysicsUtilities:
         ------
         The growth velocity at a given boundary cell. [float]
         """
-        v_growth = self.calculate_local_growth_velocity(sat, kink)
-        growth_time_increment = self.H*self.D_x*(1-filling_factor)/v_growth
+        v_growth = self.calculate_local_growth_velocity(sat, kink) # growth velocity
+        # approximate time increment for cell to grow into ice
+        growth_time_increment = self.H*self.D_x*(1-filling_factor)/v_growth # time increment for cell to grow
 
         return growth_time_increment
 
@@ -506,13 +507,14 @@ class PhysicsUtilities:
         ------
         The shortest growth time. [float]
         """
+        # initializes growth time array
         boundary_cell_amount = np.shape(boundary_cells)[0]
         growth_time_array = np.empty(boundary_cell_amount)
             
         for i in range(boundary_cell_amount):
-            growth_time_array[i] = filling_timing_array[boundary_cells[i,:]]
+            growth_time_array[i] = filling_timing_array[boundary_cells[i,:]] # update growth times
 
-        minimum_growth_time = np.min(growth_time_array)
+        minimum_growth_time = np.min(growth_time_array) # fetch minimum growth time
 
         return minimum_growth_time
 
@@ -607,8 +609,32 @@ class PhysicsUtilities:
     "diffusion_rules" : nb.float32[:,:,::1]
 })
 class SaturationRelaxationUtilities:
-    """ A class that regroups methods with the common purpose of allowing for the 
-    
+    """ A class that regroups methods with the common purpose of 
+    allowing for the diffusion and application of the boundary 
+    conditions to the supersaturation field.
+
+    Attributes
+    ----------
+    L : int
+        Number of cells in the long axis of the model
+    W : int
+        Number of cells in the short axis of the model
+    max_iter : int
+        Maximum amount of iterations in the relaxation algo
+    diffusion_rules : array(3d, float)
+        The submask applied to the corresponding 'neigbor index' 
+        for every cell in the model. Array is indexed as 
+        Arr[i,j,k], where:
+        - i : line of the cell to diffuse.
+        - j : column of the cell to diffuse.
+        - k : coefficient by which to multiply saturation situated at 
+            neighbor index `k`.
+
+    Public methods
+    --------------
+    diffuse_to_convergence : 
+        A method that diffuses and applies boundary conditions to 
+        the saturation iteratively to convergence.
     """
 
     def __init__(self, L, max_iter):
@@ -725,9 +751,23 @@ class SaturationRelaxationUtilities:
     # Opp utilities #
 
 
-    def _calculate_sat_opp_average(self, sat_map, local_neighbors, local_opps): ################################### WHISHY WASHY FUNCTION CALL ###########
+    def _calculate_sat_opp_average(self, sat_map, local_neighbors, local_opps): 
         """ Calculates the average saturation of opposing cells located at the 
-        
+        cell corresponding to local_neighbors provided.
+
+        Arguments
+        ---------
+        sat_map : array(float, 2d)
+            The saturation field before the diffusion step.
+        local_neighbors : array(float, 2d)
+            The local neighbors as a slice of neighbor_array[i,j,:,:].
+        local_opps : array(float, 1d)
+            An array containing up to the 3 possible opposing cells, np.nan if no 
+            more opposing cells. 
+
+        Return
+        ------
+        The average saturation of all opposing cells for a given cell. [float]
         """
         sat_sum = 0
         opp_counter = 0
@@ -775,8 +815,32 @@ class SaturationRelaxationUtilities:
 
 
     def _execute_relaxation_step(self, old_sat_map, normal_cells, boundary_cells, neighbor_array, boundary_map, opp_array, PU):
-        """ JESUS CHRIST FIGURE THIS OUT LMAO.
+        """ Executes a single step of the relaxation algorithm.
 
+        Arguments
+        ---------
+        old_sat_map : array(float, 2d)
+            The saturation field before the diffusion step.
+        normal_cells : array(int, 2d)
+            List of coordinates of all the non-boundary vapor cells in the model.
+        boundary_cells : array(int, 2d)
+            List of coordinates of all the boundary cells in the model.
+        neighbor_array : array(float, 4d)
+            The array representing neigbors in the model of the form produced by 
+            construct_neighbor_array().
+        boundary_map : array(int, 2d)
+            Map that represents the amount of next-neighbor ice cells (kink) for 
+            each cell.
+        opp_array : array(float, 2d)
+            An array containing up to the 3 possible opposing cells for each 
+            boundary cell, np.nan if no more opposing cells. 
+        PU : class instance object
+            An instance of PhysicsUtilities
+            
+
+        Return
+        ------
+        The new sat map after applying diffusion equation and boundary conditions once [array(float, 2d)]
         """
         new_sat_map = old_sat_map.copy() # initialize new sat map as a copy of the old sat
 
@@ -792,6 +856,7 @@ class SaturationRelaxationUtilities:
             local_neighbors = neighbor_array[line, col, :, :]
             local_diffusion_rules = self.diffusion_rules[line, col, :] # gets the local diffusion rules
 
+            # new sat map post diffusion
             new_sat_map[line, col] = self._diffuse_cell(old_sat_map, local_diffusion_rules, local_neighbors)
 
         # application of boundary conditions to cells, I guess
@@ -805,6 +870,7 @@ class SaturationRelaxationUtilities:
 
             sat_opp_avg = self._calculate_sat_opp_average(old_sat_map, local_neighbors, local_opps)
             
+            # new sat map post boundary_condition
             new_sat_map[line, col] = PU.apply_boundary_condition(
                 line, 
                 col, 
@@ -821,7 +887,38 @@ class SaturationRelaxationUtilities:
 
     def diffuse_to_convergence(self, sat_map, epsilon, normal_cells, boundary_cells, boundary_map, neighbor_array, opp_array, PU):
         """ Repeats the relaxation steps until the desired convergence is achieved.
-        NOTE : epsilon is left as a dangly parameter because enveloppe class can adjust it.
+        
+        Arguments
+        ---------
+        sat_map : array(float, 2d)
+            The saturation field before the diffusion step.
+        epsilon : float
+            Maximum tolerated difference between saturation map renders to be 
+            considered converged.
+        normal_cells : array(int, 2d)
+            List of coordinates of all the non-boundary vapor cells in the model.
+        boundary_cells : array(int, 2d)
+            List of coordinates of all the boundary cells in the model.
+        neighbor_array : array(float, 4d)
+            The array representing neigbors in the model of the form produced by 
+            construct_neighbor_array().
+        boundary_map : array(int, 2d)
+            Map that represents the amount of next-neighbor ice cells (kink) for 
+            each cell.
+        opp_array : array(float, 2d)
+            An array containing up to the 3 possible opposing cells for each 
+            boundary cell, np.nan if no more opposing cells. 
+        PU : class instance object
+            An instance of PhysicsUtilities
+        
+        Return
+        ------
+        new_sat :
+            the updated saturation map [array(float, 2d)]
+        convergence :
+            whether or not the process converged [bool]
+        i :
+            the amount of iterations done before end of process [int]
         """
         # initializes `old_sat` as a copy of the given `sat_map`
         old_sat = sat_map.copy() 
@@ -862,8 +959,30 @@ class SaturationRelaxationUtilities:
     "minimum_time_increment" : nb.float32
 })
 class GrowthUtilities:
-    """
-    FDAFADFAFASFas
+    """ A class that manages the growth of the crystal via handling the 
+    transition from boundary cells to ice cells.
+
+    Attributes
+    ----------
+    L : int
+        Number of cells in the long axis of the model
+    W : int
+        Number of cells in the short axis of the model
+    filling_array : array(2d, float)
+        Array having values between 0 and 1 to indicate how close a 
+        boundary cell is to becoming an ice cell
+    minimum_time_increment : float
+        The smallest growth time increment calculable from the boundary 
+        cells.
+
+    Public methods
+    --------------
+    update_minimum_time :
+        updates the minimum time increment with current simulation values.
+    update_filling_array : 
+        updates the filling array from current simulation values.
+    ammend_ice_map_from_filling : 
+        updates the ice map by turning cells with a filling value >= 1 to ice.
     """
     def __init__(self, L):
         self.L = L
@@ -877,10 +996,27 @@ class GrowthUtilities:
     def update_minimum_time(self, boundary_cells, sat_map, boundary_map, PU):
         """Calculates the minimum time increment in the active boundary cells 
         and updates the minimum_time_increment_attricute
+
+        Arguments
+        ---------
+        boundary_cells : array(int, 2d)
+            List of coordinates of all the boundary cells in the model.
+        sat_map : array(float, 2d)
+            The saturation field before the diffusion step.
+        boundary_map : array(int, 2d)
+            Map that represents the amount of next-neighbor ice cells (kink) for 
+            each cell.
+        PU : class instance object
+            An instance of PhysicsUtilities
+
+        Return
+        ------
+        None
+        
         """
 
-        boundary_cell_amount = np.shape(boundary_cells)[0]
-        time_increments = np.empty(boundary_cell_amount)
+        boundary_cell_amount = np.shape(boundary_cells)[0] # amount of boundary cells
+        time_increments = np.empty(boundary_cell_amount) # initialize time increment array
 
         for i in range(boundary_cell_amount):
             line = boundary_cells[i,0]
@@ -901,8 +1037,25 @@ class GrowthUtilities:
 
 
     def update_filling_array(self, boundary_cells, sat_map, boundary_map, PU):
-        """
-        
+        """ Updates the filling array objet using the minimum time and the 
+        PhysicsUtilities class.
+
+        Arguments
+        ---------
+        boundary_cells : array(int, 2d)
+            List of coordinates of all the boundary cells in the model.
+        sat_map : array(float, 2d)
+            The saturation field.
+        boundary_map : array(int, 2d)
+            Map that represents the amount of next-neighbor ice cells (kink) for 
+            each cell.
+        PU : class instance object
+            An instance of PhysicsUtilities
+
+        Return
+        ------
+        None
+
         """
 
         for coords in boundary_cells: # only execute over boundary cells
@@ -919,7 +1072,20 @@ class GrowthUtilities:
 
 
     def ammend_ice_map_from_filling(self, ice_map):
-        """
+        """ Ammends the ice map by updating cells where the 
+        filling factor has progressed to >= 1.
+
+        Arguments
+        ---------
+        ice_map : array(bool, 2d)
+            Boolean mask representing ice status of a cell.
+        
+        Return
+        ------
+        ice_map : 
+            The new ammended ice map [array(bool, 2d)]
+        ice_map_progressed : 
+            Whether or not ice map was ammended [bool]
         """
         # default value of the progression status
         ice_map_progressed = False
